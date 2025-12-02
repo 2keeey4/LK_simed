@@ -17,13 +17,6 @@ namespace diplom_1.Data
         public DbSet<Request> Requests { get; set; }
         public DbSet<Product> Products { get; set; }
 
-        // --- Новые таблицы для лицензий ---
-        public DbSet<Computer> Computers { get; set; }
-        public DbSet<ComputerLicense> ComputerLicenses { get; set; }
-        public DbSet<License> Licenses { get; set; }
-        public DbSet<Edition> Editions { get; set; }
-        public DbSet<Module> Modules { get; set; }
-
         // --- Комментарии и вложения ---
         public DbSet<Comment> Comments { get; set; }
         public DbSet<Attachment> Attachments { get; set; }
@@ -33,6 +26,13 @@ namespace diplom_1.Data
         public DbSet<UserPermission> UserPermissions { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
+
+        // --- Новые таблицы от коллеги ---
+        public DbSet<Computer> Computers { get; set; }
+        public DbSet<License> Licenses { get; set; }
+        public DbSet<Edition> Editions { get; set; }
+        public DbSet<Module> Modules { get; set; }
+        public DbSet<ComputerLicense> ComputerLicenses { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -95,7 +95,7 @@ namespace diplom_1.Data
                 .HasForeignKey(up => up.BranchId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // --- RolePermission ---
+            // --- RolePermission (пресеты) ---
             modelBuilder.Entity<RolePermission>()
                 .HasOne(rp => rp.Role)
                 .WithMany(r => r.RolePermissions)
@@ -158,6 +158,56 @@ namespace diplom_1.Data
                 .WithMany(c => c.Attachments)
                 .HasForeignKey(a => a.CommentId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // --- NEW RELATIONS FOR LICENSE SYSTEM ---  
+
+            modelBuilder.Entity<Computer>()
+                .HasOne(c => c.Branch)
+                .WithMany()
+                .HasForeignKey(c => c.BranchId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<Computer>()
+                .HasOne(c => c.Organization)
+                .WithMany()
+                .HasForeignKey(c => c.OrganizationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<Computer>()
+                .HasOne(c => c.License)
+                .WithMany(l => l.ComputerLicenses)
+                .HasForeignKey(c => c.LicenseId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<ComputerLicense>()
+                .HasOne(cl => cl.Computer)
+                .WithMany()
+                .HasForeignKey(cl => cl.ComputerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ComputerLicense>()
+                .HasOne(cl => cl.License)
+                .WithMany(l => l.ComputerLicenses)
+                .HasForeignKey(cl => cl.LicenseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ComputerLicense>()
+                .HasOne(cl => cl.Product)
+                .WithMany(p => p.Licenses)
+                .HasForeignKey(cl => cl.ProductId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<ComputerLicense>()
+                .HasOne(cl => cl.Edition)
+                .WithMany(e => e.Licenses)
+                .HasForeignKey(cl => cl.EditionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<ComputerLicense>()
+                .HasOne(cl => cl.Module)
+                .WithMany()
+                .HasForeignKey(cl => cl.ModuleId)
+                .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }

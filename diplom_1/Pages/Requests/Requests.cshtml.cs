@@ -11,33 +11,57 @@ namespace diplom_1.Pages.Requests
         private readonly AppDbContext _context;
         public RequestsModel(AppDbContext context) => _context = context;
 
-        // ====================== ДАННЫЕ ДЛЯ UI ======================
+        // ===============================================================
+        // UI
+        // ===============================================================
+
         public List<RequestDto> Requests { get; set; } = new();
         public List<Organization> Organizations { get; set; } = new();
         public List<Branch> Branches { get; set; } = new();
         public List<Product> Products { get; set; } = new();
-        public List<User> AvailableUsers { get; set; } = new();
 
+        // ФИЛЬТРЫ (используют ViewOrgIds/ViewBranchIds)
         public List<Organization> FilterOrganizations => Organizations;
         public List<Branch> FilterBranches => Branches;
 
+        // СОЗДАНИЕ
         public List<Organization> CreateOrganizations { get; set; } = new();
         public List<Branch> CreateBranches { get; set; } = new();
+        public List<User> AvailableUsers { get; set; } = new();
 
         public int CurrentUserId { get; set; }
 
-        // ====================== КОНСТАНТЫ ======================
-        public List<string> Statuses { get; set; } = new() { "Создана", "В работе", "Завершена", "Отменена" };
-        public List<string> Priorities { get; set; } = new() { "Низкий", "Средний", "Высокий", "Критический" };
+        // Статусы / приоритеты
+        public List<string> Statuses { get; } = new()
+        {
+            "Создана",
+            "В работе",
+            "Завершена",
+            "Отменена"
+        };
 
-        // ====================== СТАТИСТИКА ======================
+        public List<string> Priorities { get; } = new()
+        {
+            "Низкий",
+            "Средний",
+            "Высокий",
+            "Критический"
+        };
+
+        // ===============================================================
+        // Статистика
+        // ===============================================================
+
         public int TotalCount { get; set; }
         public int CreatedCount { get; set; }
         public int InWorkCount { get; set; }
         public int DoneCount { get; set; }
         public int CancelledCount { get; set; }
 
-        // ====================== ПРАВА ======================
+        // ===============================================================
+        // Права
+        // ===============================================================
+
         public bool CanCreate { get; set; }
         public bool CanEdit { get; set; }
         public bool CanDelete { get; set; }
@@ -46,15 +70,19 @@ namespace diplom_1.Pages.Requests
         public bool CanSeeAnalytics { get; set; }
         public bool CanCreateForOthers { get; set; }
 
-        // ====================== ДОСТУПЫ ПО ОРГ/ФИЛ ======================
+        // ===============================================================
+        // Доступы (or/branch)
+        // ===============================================================
+
         public List<int> ViewOrgIds { get; set; } = new();
         public List<int> ViewBranchIds { get; set; } = new();
         public List<int> CreateOrgIds { get; set; } = new();
         public List<int> CreateBranchIds { get; set; } = new();
 
-        // =====================================================================
-        // ==============================   GET   ===============================
-        // =====================================================================
+        // ===============================================================
+        // GET
+        // ===============================================================
+
         public async Task OnGetAsync()
         {
             int userId = HttpContext.Session.GetInt32("UserId") ?? 0;
@@ -66,7 +94,10 @@ namespace diplom_1.Pages.Requests
                 return;
             }
 
-            // ---- 1. Права ----
+            //----------------------------------------------------------
+            // 1. Права пользователя
+            //----------------------------------------------------------
+
             var userPermissions = await _context.UserPermissions
                 .Include(p => p.Permission)
                 .Where(p => p.UserId == userId)
@@ -82,40 +113,50 @@ namespace diplom_1.Pages.Requests
             CanSeeAnalytics = perms.Any(p => p.Action.Contains("Аналитика"));
             CanCreateForOthers = perms.Any(p => p.Action.Contains("Создать от имени"));
 
-            // ---- 2. Доступы ----
+            //----------------------------------------------------------
+            // 2. Доступы пользователя по организациям / филиалам
+            //----------------------------------------------------------
+
             ViewOrgIds = userPermissions
-                .Where(up => up.Permission.Module == "Задачи" &&
-                             up.Permission.Action.Contains("Просмотр") &&
-                             up.OrganizationId != null)
-                .Select(up => up.OrganizationId!.Value)
+                .Where(p =>
+                    p.Permission.Module == "Задачи" &&
+                    p.Permission.Action.Contains("Просмотр") &&
+                    p.OrganizationId != null)
+                .Select(p => p.OrganizationId!.Value)
                 .Distinct()
                 .ToList();
 
             ViewBranchIds = userPermissions
-                .Where(up => up.Permission.Module == "Задачи" &&
-                             up.Permission.Action.Contains("Просмотр") &&
-                             up.BranchId != null)
-                .Select(up => up.BranchId!.Value)
+                .Where(p =>
+                    p.Permission.Module == "Задачи" &&
+                    p.Permission.Action.Contains("Просмотр") &&
+                    p.BranchId != null)
+                .Select(p => p.BranchId!.Value)
                 .Distinct()
                 .ToList();
 
             CreateOrgIds = userPermissions
-                .Where(up => up.Permission.Module == "Задачи" &&
-                             up.Permission.Action.Contains("Добавление") &&
-                             up.OrganizationId != null)
-                .Select(up => up.OrganizationId!.Value)
+                .Where(p =>
+                    p.Permission.Module == "Задачи" &&
+                    p.Permission.Action.Contains("Добавление") &&
+                    p.OrganizationId != null)
+                .Select(p => p.OrganizationId!.Value)
                 .Distinct()
                 .ToList();
 
             CreateBranchIds = userPermissions
-                .Where(up => up.Permission.Module == "Задачи" &&
-                             up.Permission.Action.Contains("Добавление") &&
-                             up.BranchId != null)
-                .Select(up => up.BranchId!.Value)
+                .Where(p =>
+                    p.Permission.Module == "Задачи" &&
+                    p.Permission.Action.Contains("Добавление") &&
+                    p.BranchId != null)
+                .Select(p => p.BranchId!.Value)
                 .Distinct()
                 .ToList();
 
-            // ---- 3. UI списки ----
+            //----------------------------------------------------------
+            // 3. ORGANIZATIONS / BRANCHES / PRODUCTS
+            //----------------------------------------------------------
+
             Organizations = await _context.Organizations
                 .Where(o => ViewOrgIds.Contains(o.Id))
                 .OrderBy(o => o.Name)
@@ -123,6 +164,7 @@ namespace diplom_1.Pages.Requests
 
             Branches = await _context.Branches
                 .Where(b => ViewBranchIds.Contains(b.Id))
+                .Include(b => b.Organization)
                 .OrderBy(b => b.Address)
                 .ToListAsync();
 
@@ -130,7 +172,10 @@ namespace diplom_1.Pages.Requests
                 .OrderBy(p => p.Name)
                 .ToListAsync();
 
-            // ---- 4. Для создания заявки ----
+            //----------------------------------------------------------
+            // 4. Для создания заявки
+            //----------------------------------------------------------
+
             CreateOrganizations = await _context.Organizations
                 .Where(o => CreateOrgIds.Contains(o.Id))
                 .OrderBy(o => o.Name)
@@ -141,7 +186,10 @@ namespace diplom_1.Pages.Requests
                 .OrderBy(b => b.Address)
                 .ToListAsync();
 
-            // ---- 5. Доступные пользователи для "создать от имени"
+            //----------------------------------------------------------
+            // 5. Доступные пользователи для "Создать от имени"
+            //----------------------------------------------------------
+
             if (CanCreateForOthers)
             {
                 AvailableUsers = await _context.Users
@@ -149,13 +197,16 @@ namespace diplom_1.Pages.Requests
                     .Include(u => u.UserBranches)
                     .Where(u =>
                         u.Id == userId ||
-                        u.UserOrganizations.Any(o => CreateOrgIds.Contains(o.OrganizationId)) ||
-                        u.UserBranches.Any(b => CreateBranchIds.Contains(b.BranchId)))
+                        u.UserOrganizations.Any(x => CreateOrgIds.Contains(x.OrganizationId)) ||
+                        u.UserBranches.Any(x => CreateBranchIds.Contains(x.BranchId)))
                     .OrderBy(u => u.FullName)
                     .ToListAsync();
             }
 
-            // ---- 6. Заявки ----
+            //----------------------------------------------------------
+            // 6. Заявки (САМЫЙ важный фильтр — доступы)
+            //----------------------------------------------------------
+
             var list = await _context.Requests
                 .Include(r => r.Organization)
                 .Include(r => r.Branch)
@@ -168,14 +219,20 @@ namespace diplom_1.Pages.Requests
                 .Distinct()
                 .ToListAsync();
 
-            // ---- 7. Статистика ----
+            //----------------------------------------------------------
+            // 7. Статистика
+            //----------------------------------------------------------
+
             TotalCount = list.Count;
             CreatedCount = list.Count(r => r.Status == "Создана");
             InWorkCount = list.Count(r => r.Status == "В работе");
             DoneCount = list.Count(r => r.Status == "Завершена");
             CancelledCount = list.Count(r => r.Status == "Отменена");
 
-            // ---- 8. DTO ----
+            //----------------------------------------------------------
+            // 8. DTO
+            //----------------------------------------------------------
+
             Requests = list
                 .Select(r => new RequestDto
                 {
@@ -194,9 +251,10 @@ namespace diplom_1.Pages.Requests
                 .ToList();
         }
 
-        // =====================================================================
-        // ============================ CREATE ================================
-        // =====================================================================
+        // ===============================================================
+        // POST — создание заявки
+        // ===============================================================
+
         public async Task<IActionResult> OnPostCreateAsync()
         {
             int userId = HttpContext.Session.GetInt32("UserId") ?? 0;
@@ -204,7 +262,10 @@ namespace diplom_1.Pages.Requests
             if (userId == 0)
                 return new JsonResult(new { error = "Не авторизован" }) { StatusCode = 401 };
 
-            // ---- Повторная загрузка прав ----
+            //----------------------------------------------------------
+            // Повторно загружаем права
+            //----------------------------------------------------------
+
             var userPermissions = await _context.UserPermissions
                 .Include(p => p.Permission)
                 .Where(p => p.UserId == userId)
@@ -215,21 +276,30 @@ namespace diplom_1.Pages.Requests
             CanCreate = perms.Any(p => p.Module == "Задачи" && p.Action.Contains("Добавление"));
             CanCreateForOthers = perms.Any(p => p.Action.Contains("Создать от имени"));
 
+            if (!CanCreate)
+                return Forbid();
+
             CreateOrgIds = userPermissions
-                .Where(up => up.Permission.Module == "Задачи" &&
-                             up.Permission.Action.Contains("Добавление") &&
-                             up.OrganizationId != null)
-                .Select(up => up.OrganizationId!.Value)
+                .Where(p =>
+                    p.Permission.Module == "Задачи" &&
+                    p.Permission.Action.Contains("Добавление") &&
+                    p.OrganizationId != null)
+                .Select(p => p.OrganizationId!.Value)
                 .Distinct()
                 .ToList();
 
             CreateBranchIds = userPermissions
-                .Where(up => up.Permission.Module == "Задачи" &&
-                             up.Permission.Action.Contains("Добавление") &&
-                             up.BranchId != null)
-                .Select(up => up.BranchId!.Value)
+                .Where(p =>
+                    p.Permission.Module == "Задачи" &&
+                    p.Permission.Action.Contains("Добавление") &&
+                    p.BranchId != null)
+                .Select(p => p.BranchId!.Value)
                 .Distinct()
                 .ToList();
+
+            //----------------------------------------------------------
+            // Доступные пользователи (если нужно)
+            //----------------------------------------------------------
 
             if (CanCreateForOthers)
             {
@@ -238,51 +308,54 @@ namespace diplom_1.Pages.Requests
                     .Include(u => u.UserBranches)
                     .Where(u =>
                         u.Id == userId ||
-                        u.UserOrganizations.Any(o => CreateOrgIds.Contains(o.OrganizationId)) ||
-                        u.UserBranches.Any(b => CreateBranchIds.Contains(b.BranchId)))
+                        u.UserOrganizations.Any(x => CreateOrgIds.Contains(x.OrganizationId)) ||
+                        u.UserBranches.Any(x => CreateBranchIds.Contains(x.BranchId)))
                     .OrderBy(u => u.FullName)
                     .ToListAsync();
             }
 
-            if (!CanCreate)
-                return Forbid();
+            //----------------------------------------------------------
+            // Чтение данных формы
+            //----------------------------------------------------------
 
-            // ---- Чтение данных формы ----
             string title = Request.Form["Title"];
             string topic = Request.Form["Topic"];
-            int organizationId = int.Parse(Request.Form["OrganizationId"]);
+            int orgId = int.Parse(Request.Form["OrganizationId"]);
 
-            // Филиал может быть пустым
-            int branchIdParsed = 0;
             int? branchId = null;
-            if (int.TryParse(Request.Form["BranchId"], out branchIdParsed))
-                branchId = branchIdParsed;
+            if (int.TryParse(Request.Form["BranchId"], out int branchParsed))
+                branchId = branchParsed;
 
             int productId = int.Parse(Request.Form["ProductId"]);
             string priority = Request.Form["Priority"];
             int createdBy = int.Parse(Request.Form["CreatedById"]);
-            string? description = Request.Form["Description"];
+            string description = Request.Form["Description"];
 
-            // ---- Проверки ----
-            if (!CanCreateForOthers && createdBy != userId)
-                return Forbid();
+            //----------------------------------------------------------
+            // Проверки доступа
+            //----------------------------------------------------------
 
-            if (CanCreateForOthers &&
-                !AvailableUsers.Any(u => u.Id == createdBy))
-                return Forbid();
-
-            if (!CreateOrgIds.Contains(organizationId))
+            if (!CreateOrgIds.Contains(orgId))
                 return Forbid();
 
             if (branchId != null && !CreateBranchIds.Contains(branchId.Value))
                 return Forbid();
 
-            // ---- Создание заявки ----
+            if (!CanCreateForOthers && createdBy != userId)
+                return Forbid();
+
+            if (CanCreateForOthers && !AvailableUsers.Any(u => u.Id == createdBy))
+                return Forbid();
+
+            //----------------------------------------------------------
+            // Создание заявки
+            //----------------------------------------------------------
+
             var req = new Request
             {
                 Title = title,
                 Topic = topic,
-                OrganizationId = organizationId,
+                OrganizationId = orgId,
                 BranchId = branchId,
                 ProductId = productId,
                 Priority = priority,
@@ -297,8 +370,12 @@ namespace diplom_1.Pages.Requests
 
             int requestId = req.Id;
 
-            // ---- Сохранение вложения ----
+            //----------------------------------------------------------
+            // Сохранение вложения
+            //----------------------------------------------------------
+
             var file = Request.Form.Files.FirstOrDefault();
+
             if (file != null && file.Length > 0)
             {
                 string folder = Path.Combine("wwwroot", "uploads", "requests", requestId.ToString());
@@ -314,40 +391,51 @@ namespace diplom_1.Pages.Requests
                 var attachment = new Attachment
                 {
                     FilePath = $"/uploads/requests/{requestId}/{fileName}",
-                    RequestId = requestId,
-                    UploadedAt = DateTime.UtcNow
+                    RequestId = requestId
                 };
 
                 _context.Attachments.Add(attachment);
                 await _context.SaveChangesAsync();
             }
 
-            return new JsonResult(new { success = true, id = req.Id });
+            return new JsonResult(new { success = true, id = requestId });
         }
 
-        // =====================================================================
-        // ========================== BranchesByOrgs ===========================
-        // =====================================================================
+        // ===============================================================
+        // GET — BranchesByOrgs
+        // для фильтров и модалки
+        // ===============================================================
+
         public async Task<IActionResult> OnGetBranchesByOrgsAsync(string orgIds)
         {
             int userId = HttpContext.Session.GetInt32("UserId") ?? 0;
 
-            // Загружаем права (важно!)
             var permissions = await _context.UserPermissions
                 .Include(p => p.Permission)
                 .Where(p => p.UserId == userId)
                 .ToListAsync();
 
+            // Доступ к филиалам ДЛЯ СОЗДАНИЯ
             CreateBranchIds = permissions
-                .Where(p => p.Permission.Module == "Задачи" &&
-                            p.Permission.Action.Contains("Добавление") &&
-                            p.BranchId != null)
+                .Where(p =>
+                    p.Permission.Module == "Задачи" &&
+                    p.Permission.Action.Contains("Добавление") &&
+                    p.BranchId != null)
                 .Select(p => p.BranchId!.Value)
                 .Distinct()
                 .ToList();
 
-            if (string.IsNullOrWhiteSpace(orgIds))
-                return new JsonResult(new List<object>());
+            // Если "all" — возвращаем ВСЕ филиалы, на которые есть права
+            if (string.IsNullOrWhiteSpace(orgIds) || orgIds == "all")
+            {
+                var allBranches = await _context.Branches
+                    .Where(b => CreateBranchIds.Contains(b.Id))
+                    .OrderBy(b => b.Address)
+                    .Select(b => new { id = b.Id, address = b.Address })
+                    .ToListAsync();
+
+                return new JsonResult(allBranches);
+            }
 
             var ids = orgIds.Split(',')
                 .Where(x => int.TryParse(x, out _))
@@ -365,36 +453,38 @@ namespace diplom_1.Pages.Requests
             return new JsonResult(branches);
         }
 
-        // =====================================================================
-        // ======================== UsersByOrgBranch ============================
-        // =====================================================================
+        // ===============================================================
+        // GET — UsersByOrgBranch
+        // ===============================================================
+
         public async Task<IActionResult> OnGetUsersByOrgBranchAsync(int orgId, int? branchId)
         {
             int userId = HttpContext.Session.GetInt32("UserId") ?? 0;
 
-            // 🔥 Загружаем права!
-            var permissions = await _context.UserPermissions
+            var perms = await _context.UserPermissions
                 .Include(p => p.Permission)
                 .Where(p => p.UserId == userId)
                 .ToListAsync();
 
-            CanCreateForOthers = permissions.Any(p => p.Permission.Action.Contains("Создать от имени"));
+            CanCreateForOthers = perms.Any(p => p.Permission.Action.Contains("Создать от имени"));
 
             if (!CanCreateForOthers)
                 return new JsonResult(new List<object>());
 
-            CreateOrgIds = permissions
-                .Where(p => p.Permission.Module == "Задачи" &&
-                            p.Permission.Action.Contains("Добавление") &&
-                            p.OrganizationId != null)
+            CreateOrgIds = perms
+                .Where(p =>
+                    p.Permission.Module == "Задачи" &&
+                    p.Permission.Action.Contains("Добавление") &&
+                    p.OrganizationId != null)
                 .Select(p => p.OrganizationId!.Value)
                 .Distinct()
                 .ToList();
 
-            CreateBranchIds = permissions
-                .Where(p => p.Permission.Module == "Задачи" &&
-                            p.Permission.Action.Contains("Добавление") &&
-                            p.BranchId != null)
+            CreateBranchIds = perms
+                .Where(p =>
+                    p.Permission.Module == "Задачи" &&
+                    p.Permission.Action.Contains("Добавление") &&
+                    p.BranchId != null)
                 .Select(p => p.BranchId!.Value)
                 .Distinct()
                 .ToList();
@@ -402,7 +492,7 @@ namespace diplom_1.Pages.Requests
             if (!CreateOrgIds.Contains(orgId))
                 return new JsonResult(new List<object>());
 
-            IQueryable<User> query = _context.Users
+            IQueryable<User> q = _context.Users
                 .Include(u => u.UserOrganizations)
                 .Include(u => u.UserBranches);
 
@@ -411,24 +501,36 @@ namespace diplom_1.Pages.Requests
                 if (!CreateBranchIds.Contains(branchId.Value))
                     return new JsonResult(new List<object>());
 
-                query = query.Where(u =>
-                    u.UserBranches.Any(b => b.BranchId == branchId.Value));
+                q = q.Where(u =>
+                    u.UserBranches.Any(x => x.BranchId == branchId.Value));
             }
             else
             {
-                query = query.Where(u =>
-                    u.UserOrganizations.Any(o => o.OrganizationId == orgId));
+                q = q.Where(u =>
+                    u.UserOrganizations.Any(x => x.OrganizationId == orgId) ||
+                    u.UserBranches.Any(x =>
+                        CreateBranchIds.Contains(x.BranchId) &&
+                        _context.Branches.Any(b =>
+                            b.Id == x.BranchId &&
+                            b.OrganizationId == orgId)));
             }
 
-            var users = await query
+            var users = await q
                 .OrderBy(u => u.FullName)
-                .Select(u => new { id = u.Id, fullName = u.FullName })
+                .Select(u => new
+                {
+                    id = u.Id,
+                    fullName = u.FullName
+                })
                 .ToListAsync();
 
             return new JsonResult(users);
         }
 
-        // ====================== DTO ======================
+        // ===============================================================
+        // DTO
+        // ===============================================================
+
         public class RequestDto
         {
             public int Id { get; set; }

@@ -3,122 +3,173 @@ let selectedStartDate = null;
 let selectedEndDate = null;
 
 document.addEventListener("DOMContentLoaded", () => {
-    const toggleFiltersBtn = document.getElementById("toggleFiltersBtn");
-    const filtersPanel = document.getElementById("filtersPanel");
-    const applyFiltersBtn = document.getElementById("applyFiltersBtn");
-    const clearFiltersBtn = document.getElementById("clearFiltersBtn");
-
-    if (toggleFiltersBtn) {
-        toggleFiltersBtn.addEventListener("click", () => {
-            filtersVisible = !filtersVisible;
-            filtersPanel.classList.toggle("hidden", !filtersVisible);
-            toggleFiltersBtn.textContent = filtersVisible ? "Скрыть фильтры" : "Фильтры";
-        });
-    }
-
-    const modal = document.getElementById("createModal");
-    const openBtn = document.getElementById("btnCreateRequest");
-    const closeBtn = document.getElementById("closeModalBtn");
-    const cancelBtn = document.getElementById("cancelModalBtn");
-
-    if (openBtn) openBtn.onclick = () => { modal.classList.remove("hidden"); document.body.style.overflow = "hidden"; };
-    if (closeBtn) closeBtn.onclick = closeModal;
-    if (cancelBtn) cancelBtn.onclick = closeModal;
-    window.addEventListener("click", e => { if (e.target.classList.contains("modal-overlay")) closeModal(); });
-
-    function closeModal() { modal.classList.add("hidden"); document.body.style.overflow = ""; }
-
-    if (applyFiltersBtn) applyFiltersBtn.addEventListener("click", applyFilters);
-    if (clearFiltersBtn) clearFiltersBtn.addEventListener("click", clearFilters);
-
+    initFilterPanel();
     initDropdowns();
     initCalendar();
-    initRowClicks();
     initSearch();
-    bindOrgBranchDependency();
+    initRowClicks();
     initAnalyticsToggle();
-    bindCreateOrgBranchDependency();
+    bindFilterOrgBranch();
+    bindCreateOrgBranch();
     initCreateRequestSubmit();
+    initModal();
 });
 
+/* --------------------- ФИЛЬТР-ПАНЕЛЬ --------------------- */
+
+function initFilterPanel() {
+    const btn = document.getElementById("toggleFiltersBtn");
+    const panel = document.getElementById("filtersPanel");
+    const applyBtn = document.getElementById("applyFiltersBtn");
+    const clearBtn = document.getElementById("clearFiltersBtn");
+
+    if (!btn) return;
+
+    btn.addEventListener("click", () => {
+        filtersVisible = !filtersVisible;
+        panel.classList.toggle("hidden", !filtersVisible);
+        btn.textContent = filtersVisible ? "Скрыть фильтры" : "Фильтры";
+    });
+
+    applyBtn?.addEventListener("click", applyFilters);
+    clearBtn?.addEventListener("click", clearFilters);
+}
+
+/* --------------------- DROPDOWNS --------------------- */
 
 function initDropdowns() {
-    document.querySelectorAll(".dropdown-toggle").forEach(t => {
-        t.addEventListener("click", e => {
+    document.querySelectorAll(".dropdown-toggle").forEach(btn => {
+        btn.addEventListener("click", e => {
             e.stopPropagation();
-            const m = t.nextElementSibling;
-            document.querySelectorAll(".dropdown-menu").forEach(x => { if (x !== m) x.classList.add("hidden"); });
-            m.classList.toggle("hidden");
+            const menu = btn.nextElementSibling;
+            closeAllDropdowns(menu);
+            menu.classList.toggle("hidden");
         });
     });
 
-    document.querySelectorAll(".dropdown-menu").forEach(m => m.addEventListener("click", e => e.stopPropagation()));
-    document.addEventListener("click", () => document.querySelectorAll(".dropdown-menu").forEach(m => m.classList.add("hidden")));
+    document.addEventListener("click", () =>
+        closeAllDropdowns(null)
+    );
 
     document.querySelectorAll(".dropdown-menu input[type=checkbox]").forEach(cb => {
         cb.addEventListener("change", e => {
-            const menu = e.target.closest(".dropdown-menu");
-            const toggle = menu.previousElementSibling;
-            const allCb = menu.querySelector("input[value='all']");
-            const others = [...menu.querySelectorAll("input:not([value='all'])")];
-            const checked = [...menu.querySelectorAll("input:checked:not([value='all'])")];
-
-            if (allCb && allCb.checked) toggle.textContent = "Все";
-            else if (checked.length === 0) toggle.textContent = "Нет выбранных";
-            else toggle.textContent = `Выбрано (${checked.length})`;
-
-            if (e.target.value === "all") { if (e.target.checked) others.forEach(x => x.checked = false); }
-            else {
-                if (checked.length > 0 && allCb) allCb.checked = false;
-                if (checked.length === 0 && allCb) allCb.checked = true;
-            }
+            updateDropdownLabel(e.target.closest(".dropdown-menu"));
         });
     });
 }
 
+function closeAllDropdowns(except) {
+    document.querySelectorAll(".dropdown-menu").forEach(m => {
+        if (m !== except) m.classList.add("hidden");
+    });
+}
+
+function updateDropdownLabel(menu) {
+    const toggle = menu.previousElementSibling;
+    const all = menu.querySelector("input[value='all']");
+    const others = [...menu.querySelectorAll("input:not([value='all'])")];
+    const checked = [...menu.querySelectorAll("input:checked:not([value='all'])")];
+
+    if (all && all.checked) {
+        toggle.textContent = "Все";
+        return;
+    }
+
+    if (checked.length === 0) {
+        toggle.textContent = "Нет выбранных";
+        return;
+    }
+
+    toggle.textContent = `Выбрано (${checked.length})`;
+}
+
+/* --------------------- МОДАЛКА --------------------- */
+
+function initModal() {
+    const modal = document.getElementById("createModal");
+    const open = document.getElementById("btnCreateRequest");
+    const close = document.getElementById("closeModalBtn");
+    const cancel = document.getElementById("cancelModalBtn");
+
+    if (!modal) return;
+
+    const closeModal = () => {
+        modal.classList.add("hidden");
+        document.body.style.overflow = "";
+    };
+
+    open?.addEventListener("click", () => {
+        modal.classList.remove("hidden");
+        document.body.style.overflow = "hidden";
+    });
+
+    close?.addEventListener("click", closeModal);
+    cancel?.addEventListener("click", closeModal);
+
+    window.addEventListener("click", e => {
+        if (e.target.classList.contains("modal-overlay")) closeModal();
+    });
+}
+
+/* --------------------- ПОИСК --------------------- */
 
 function initSearch() {
     const input = document.getElementById("searchInput");
     if (!input) return;
+
     input.addEventListener("input", () => {
         const v = input.value.toLowerCase();
-        document.querySelectorAll("#requestsTable tbody tr").forEach(r => {
-            const title = r.children[0].textContent.toLowerCase();
-            r.style.display = title.includes(v) ? "" : "none";
+        document.querySelectorAll("#requestsTable tbody tr").forEach(row => {
+            const text = row.children[0].textContent.toLowerCase();
+            row.style.display = text.includes(v) ? "" : "none";
         });
     });
 }
 
+/* --------------------- ЗАВИСИМОСТЬ ОРГ → ФИЛИАЛЫ (МОДАЛКА) --------------------- */
 
-function bindCreateOrgBranchDependency() {
+function bindCreateOrgBranch() {
     const org = document.getElementById("reqOrganization");
     const branch = document.getElementById("reqBranch");
-    const user = document.getElementById("reqCreatedBy");
+    const createdBy = document.getElementById("reqCreatedBy");
 
     if (!org || !branch) return;
 
-    function clearBranches() { branch.innerHTML = `<option value="">Выберите филиал (необязательно)</option>`; }
-    function clearUsers() { if (user) user.innerHTML = `<option value="">Выберите пользователя</option>`; }
+    const clearBranches = () => {
+        branch.innerHTML = `<option value="">Выберите филиал (необязательно)</option>`;
+    };
 
-    async function loadBranches(id) {
+    const clearUsers = () => {
+        if (!createdBy) return;
+        createdBy.innerHTML = `<option value="">Выберите пользователя</option>`;
+    };
+
+    const loadBranches = async (orgId) => {
         clearBranches();
-        const r = await fetch(`/Requests?handler=BranchesByOrgs&orgIds=${id}`);
+        const r = await fetch(`/Requests?handler=BranchesByOrgs&orgIds=${orgId}`);
         const data = await r.json();
-        data.forEach(b => branch.innerHTML += `<option value="${b.id}">${b.address}</option>`);
-    }
+        data.forEach(b => {
+            branch.innerHTML += `<option value="${b.id}">${b.address}</option>`;
+        });
+    };
 
-    async function loadUsers() {
-        if (!user) return;
+    const loadUsers = async () => {
+        if (!createdBy || !org.value) return;
+
         clearUsers();
-        if (!org.value) return;
+
         const url = `/Requests?handler=UsersByOrgBranch&orgId=${org.value}&branchId=${branch.value || ""}`;
         const r = await fetch(url);
         const data = await r.json();
-        data.forEach(u => user.innerHTML += `<option value="${u.id}">${u.fullName}</option>`);
-    }
+
+        data.forEach(u => {
+            createdBy.innerHTML += `<option value="${u.id}">${u.fullName}</option>`;
+        });
+    };
 
     org.addEventListener("change", async () => {
-        clearBranches(); clearUsers();
+        clearBranches();
+        clearUsers();
         if (!org.value) return;
         await loadBranches(org.value);
         await loadUsers();
@@ -127,6 +178,7 @@ function bindCreateOrgBranchDependency() {
     branch.addEventListener("change", loadUsers);
 }
 
+/* --------------------- CREATE REQUEST --------------------- */
 
 function initCreateRequestSubmit() {
     const form = document.getElementById("createRequestForm");
@@ -134,84 +186,101 @@ function initCreateRequestSubmit() {
 
     form.addEventListener("submit", async e => {
         e.preventDefault();
+
         const fd = new FormData();
-        const t = document.querySelector("#antiForgeryForm input");
-        if (t) fd.append("__RequestVerificationToken", t.value);
+        const token = document.querySelector("#antiForgeryForm input");
+        if (token) fd.append("__RequestVerificationToken", token.value);
 
-        fd.append("Title", document.getElementById("reqTitle")?.value || "");
-        fd.append("Topic", document.getElementById("reqTopic")?.value || "");
-        fd.append("OrganizationId", document.getElementById("reqOrganization")?.value || "");
-        fd.append("BranchId", document.getElementById("reqBranch")?.value || "");
-        fd.append("ProductId", document.getElementById("reqProduct")?.value || "");
-        fd.append("Priority", document.getElementById("reqPriority")?.value || "");
-
-        const createdBy = document.getElementById("reqCreatedBy");
-        fd.append("CreatedById", createdBy ? createdBy.value : "");
-
-        fd.append("Description", document.getElementById("reqDescription")?.value || "");
+        [
+            "Title", "Topic", "OrganizationId", "BranchId",
+            "ProductId", "Priority", "Description", "CreatedById"
+        ].forEach(f => {
+            const el = document.getElementById("req" + f);
+            fd.append(f, el ? el.value : "");
+        });
 
         const file = document.getElementById("reqFile");
-        if (file && file.files.length > 0) fd.append("File", file.files[0]);
+        if (file?.files.length > 0) fd.append("File", file.files[0]);
 
         const res = await fetch("/Requests?handler=Create", { method: "POST", body: fd });
-        if (!res.ok) { showToast("Ошибка создания заявки"); return; }
+
+        if (!res.ok) {
+            showToast("Ошибка создания заявки");
+            return;
+        }
 
         showToast("Заявка успешно создана!");
-        setTimeout(() => location.reload(), 800);
+        setTimeout(() => location.reload(), 700);
     });
 }
 
+/* --------------------- ФИЛЬТРЫ: ОРГАНИЗАЦИИ → ФИЛИАЛЫ --------------------- */
 
-function bindOrgBranchDependency() {
-    const orgCb = document.querySelectorAll(".filter-org");
-    const menu = document.getElementById("branchFilterMenu");
-    if (!orgCb.length || !menu) return;
+function bindFilterOrgBranch() {
+    const orgCheckboxes = document.querySelectorAll(".filter-org");
+    const branchMenu = document.getElementById("branchFilterMenu");
 
-    orgCb.forEach(cb => {
+    if (!orgCheckboxes.length || !branchMenu) return;
+
+    orgCheckboxes.forEach(cb => {
         cb.addEventListener("change", async () => {
-            const ids = [...orgCb].filter(x => x.checked && x.value !== "all").map(x => x.value);
-            const r = await fetch(`/Requests?handler=BranchesByOrgs&orgIds=${ids.join(",")}`);
+            const ids = [...orgCheckboxes]
+                .filter(x => x.checked && x.value !== "all")
+                .map(x => x.value);
+
+            const orgsForQuery = ids.length === 0 ? "all" : ids.join(",");
+            const r = await fetch(`/Requests?handler=BranchesByOrgs&orgIds=${orgsForQuery}`);
             const data = await r.json();
 
-            menu.innerHTML = "";
-            if (!data.length) { menu.innerHTML = "<label>Нет филиалов</label>"; return; }
+            branchMenu.innerHTML = "";
 
-            menu.innerHTML = `<label><input type="checkbox" value="all" checked /> Все</label>` +
-                data.map(b => `<label><input type="checkbox" class="filter-branch" value="${b.id}" /> ${b.address}</label>`).join("");
+            branchMenu.innerHTML += `<label><input type="checkbox" value="all" checked /> Все</label>`;
 
-            initAllCheckboxBehavior(menu);
+            data.forEach(b => {
+                branchMenu.innerHTML +=
+                    `<label><input type="checkbox" class="filter-branch" value="${b.id}" /> ${b.address}</label>`;
+            });
         });
     });
 }
 
+/* --------------------- КАЛЕНДАРЬ --------------------- */
 
 function initCalendar() {
     const c = document.getElementById("calendarContainer");
     if (!c) return;
 
     const now = new Date();
-    let m = now.getMonth();
-    let y = now.getFullYear();
+    let month = now.getMonth();
+    let year = now.getFullYear();
 
-    render(m, y);
-
-    function render(month, year) {
+    const render = () => {
         c.innerHTML = "";
         const header = document.createElement("div");
         header.className = "calendar-header";
 
         const prev = document.createElement("button");
-        prev.textContent = "‹";
         prev.className = "btn small secondary";
-        prev.onclick = () => { if (month === 0) { month = 11; year--; } else month--; render(month, year); };
+        prev.textContent = "‹";
+        prev.onclick = () => {
+            month = month === 0 ? 11 : month - 1;
+            if (month === 11) year--;
+            render();
+        };
 
         const next = document.createElement("button");
-        next.textContent = "›";
         next.className = "btn small secondary";
-        next.onclick = () => { if (month === 11) { month = 0; year++; } else month++; render(month, year); };
+        next.textContent = "›";
+        next.onclick = () => {
+            month = month === 11 ? 0 : month + 1;
+            if (month === 0) year++;
+            render();
+        };
 
         const title = document.createElement("div");
-        title.textContent = `${["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"][month]} ${year}`;
+        title.textContent =
+            `${["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+                "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"][month]} ${year}`;
 
         header.append(prev, title, next);
         c.append(header);
@@ -222,119 +291,146 @@ function initCalendar() {
         const first = new Date(year, month, 1).getDay() || 7;
         const total = new Date(year, month + 1, 0).getDate();
 
-        for (let i = 1; i < first; i++) grid.append(Object.assign(document.createElement("div"), { className: "calendar-cell empty" }));
+        for (let i = 1; i < first; i++)
+            grid.append(createCalendarCell("", "empty"));
 
         for (let d = 1; d <= total; d++) {
-            const date = new Date(year, month, d);
-            const cell = document.createElement("div");
-            cell.className = "calendar-cell";
-            cell.textContent = d;
+            const cell = createCalendarCell(d);
+            const dateObj = new Date(year, month, d);
 
-            const today = new Date();
-            if (date.toDateString() === today.toDateString()) cell.classList.add("today");
+            if (isSameDay(dateObj, new Date())) cell.classList.add("today");
+            if (isSameDay(dateObj, selectedStartDate)) cell.classList.add("selected");
+            if (isSameDay(dateObj, selectedEndDate)) cell.classList.add("selected");
 
-            if (selectedStartDate && same(date, selectedStartDate)) cell.classList.add("selected");
-            if (selectedEndDate && same(date, selectedEndDate)) cell.classList.add("selected");
-
-            cell.onclick = () => select(date);
+            cell.onclick = () => selectDate(dateObj);
             grid.append(cell);
         }
+
         c.append(grid);
-    }
+    };
 
-    function select(d) {
-        if (!selectedStartDate || selectedEndDate) { selectedStartDate = d; selectedEndDate = null; }
-        else if (d < selectedStartDate) { selectedEndDate = selectedStartDate; selectedStartDate = d; }
-        else selectedEndDate = d;
-        render(m, y);
-    }
+    const createCalendarCell = (text, cls) => {
+        const div = document.createElement("div");
+        div.className = "calendar-cell " + (cls || "");
+        div.textContent = text;
+        return div;
+    };
 
-    function same(a, b) {
-        return a.getFullYear() === b.getFullYear() &&
-               a.getMonth() === b.getMonth() &&
-               a.getDate() === b.getDate();
-    }
+    const selectDate = d => {
+        if (!selectedStartDate || selectedEndDate) {
+            selectedStartDate = d;
+            selectedEndDate = null;
+        } else if (d < selectedStartDate) {
+            selectedEndDate = selectedStartDate;
+            selectedStartDate = d;
+        } else {
+            selectedEndDate = d;
+        }
+        render();
+    };
+
+    const isSameDay = (a, b) =>
+        b && a.getDate() === b.getDate() &&
+        a.getMonth() === b.getMonth() &&
+        a.getFullYear() === b.getFullYear();
+
+    render();
 }
 
+/* --------------------- ПРИМЕНЕНИЕ ФИЛЬТРОВ --------------------- */
 
 function applyFilters() {
     const f = collectFilters();
-    document.querySelectorAll("#requestsTable tbody tr").forEach(r => {
-        const c = r.children;
-        const org = c[2].textContent.toLowerCase();
-        const branch = c[3].textContent.toLowerCase();
-        const product = c[4].textContent.toLowerCase();
-        const priority = c[5].textContent.toLowerCase();
-        const status = c[6].textContent.toLowerCase();
-        const client = r.querySelector("td:nth-last-child(2)")?.textContent?.toLowerCase() || "";
-        const d = r.querySelector("td:last-child")?.textContent || "";
 
-        let v = true;
-        if (f.orgs.length && !f.orgs.includes("all")) v = v && f.orgs.some(x => org.includes(x.toLowerCase()));
-        if (f.branches.length && !f.branches.includes("all")) v = v && f.branches.some(x => branch.includes(x.toLowerCase()));
-        if (f.products.length && !f.products.includes("all")) v = v && f.products.some(x => product.includes(x.toLowerCase()));
-        if (f.statuses.length && !f.statuses.includes("all")) v = v && f.statuses.some(x => status.includes(x.toLowerCase()));
-        if (f.priorities.length && !f.priorities.includes("all")) v = v && f.priorities.some(x => priority.includes(x.toLowerCase()));
-        if (f.clients.length && !f.clients.includes("all")) v = v && f.clients.some(x => client.includes(x.toLowerCase()));
+    document.querySelectorAll("#requestsTable tbody tr").forEach(row => {
+        const cols = row.children;
+
+        const vOrg = cols[2].textContent.toLowerCase();
+        const vBranch = cols[3].textContent.toLowerCase();
+        const vProd = cols[4].textContent.toLowerCase();
+        const vPri = cols[5].textContent.toLowerCase();
+        const vStatus = cols[6].textContent.toLowerCase();
+        const vClient = row.querySelector("td:nth-last-child(2)")?.textContent.toLowerCase() || "";
+        const vDate = cols[cols.length - 1].textContent;
+
+        let visible = true;
+
+        if (!f.orgs.includes("all") && f.orgs.length)
+            visible = visible && f.orgs.some(x => vOrg.includes(x.toLowerCase()));
+
+        if (!f.branches.includes("all") && f.branches.length)
+            visible = visible && f.branches.some(x => vBranch.includes(x.toLowerCase()));
+
+        if (!f.products.includes("all") && f.products.length)
+            visible = visible && f.products.some(x => vProd.includes(x.toLowerCase()));
+
+        if (!f.statuses.includes("all") && f.statuses.length)
+            visible = visible && f.statuses.some(x => vStatus.includes(x.toLowerCase()));
+
+        if (!f.clients.includes("all") && f.clients.length)
+            visible = visible && f.clients.some(x => vClient.includes(x.toLowerCase()));
 
         if (f.startDate || f.endDate) {
-            const [dd, mm, yy] = d.split(".");
+            const [dd, mm, yy] = vDate.split(".");
             const dt = new Date(`${yy}-${mm}-${dd}`);
-            if (f.startDate && dt < new Date(f.startDate)) v = false;
-            if (f.endDate && dt > new Date(f.endDate)) v = false;
+
+            if (f.startDate && dt < new Date(f.startDate)) visible = false;
+            if (f.endDate && dt > new Date(f.endDate)) visible = false;
         }
 
-        r.style.display = v ? "" : "none";
-        r.classList.toggle("filtered", v);
+        row.style.display = visible ? "" : "none";
     });
 
     showToast("Фильтры применены");
 }
 
-
 function clearFilters() {
     document.querySelectorAll(".dropdown-menu input[type=checkbox]").forEach(cb => cb.checked = true);
-    document.querySelectorAll(".dropdown-toggle").forEach(b => b.textContent = "Все");
+    document.querySelectorAll(".dropdown-toggle").forEach(t => t.textContent = "Все");
     selectedStartDate = null;
     selectedEndDate = null;
-    const c = document.getElementById("calendarContainer");
-    if (c) { c.innerHTML = ""; initCalendar(); }
     showToast("Фильтры сброшены");
 }
 
-
 function collectFilters() {
     return {
-        orgs: getValues(".filter-org"),
-        branches: getValues(".filter-branch"),
-        products: getValues(".filter-product"),
-        statuses: getValues(".filter-status"),
-        priorities: getValues(".filter-priority"),
-        clients: getValues(".filter-client"),
+        orgs: getChecked(".filter-org"),
+        branches: getChecked(".filter-branch"),
+        products: getChecked(".filter-product"),
+        statuses: getChecked(".filter-status"),
+        priorities: getChecked(".filter-priority"),
+        clients: getChecked(".filter-client"),
         startDate: selectedStartDate ? selectedStartDate.toISOString().split("T")[0] : null,
         endDate: selectedEndDate ? selectedEndDate.toISOString().split("T")[0] : null
     };
 }
 
-function getValues(s) { return [...document.querySelectorAll(s + ":checked")].map(x => x.value); }
+function getChecked(selector) {
+    return [...document.querySelectorAll(selector + ":checked")].map(cb => cb.value);
+}
+
+/* --------------------- РЯДЫ ТАБЛИЦЫ --------------------- */
 
 function initRowClicks() {
     document.querySelectorAll("#requestsTable tbody tr").forEach(r => {
         r.addEventListener("dblclick", () => {
-            const id = r.dataset.requestId;
-            window.location.href = `/Requests/Details/${id}`;
+            window.location.href = `/Requests/Details/${r.dataset.requestId}`;
         });
     });
 }
 
+/* --------------------- ТОСТЫ --------------------- */
+
 function showToast(msg) {
-    const t = document.createElement("div");
-    t.className = "toast";
-    t.textContent = msg;
-    document.body.append(t);
-    setTimeout(() => t.classList.add("fade-out"), 2000);
-    setTimeout(() => t.remove(), 2500);
+    const div = document.createElement("div");
+    div.className = "toast";
+    div.textContent = msg;
+    document.body.append(div);
+    setTimeout(() => div.classList.add("fade-out"), 2000);
+    setTimeout(() => div.remove(), 2500);
 }
+
+/* --------------------- АНАЛИТИКА --------------------- */
 
 function initAnalyticsToggle() {
     const btn = document.getElementById("toggleAnalyticsBtn");
@@ -342,10 +438,15 @@ function initAnalyticsToggle() {
     if (!btn || !sec) return;
 
     let rendered = false;
+
     btn.addEventListener("click", () => {
-        const c = sec.classList.toggle("collapsed");
-        btn.textContent = c ? "Показать аналитику" : "Скрыть аналитику";
-        if (!c && !rendered) { renderAnalyticsCharts(); rendered = true; }
+        const collapsed = sec.classList.toggle("collapsed");
+        btn.textContent = collapsed ? "Показать аналитику" : "Скрыть аналитику";
+
+        if (!collapsed && !rendered) {
+            renderAnalyticsCharts();
+            rendered = true;
+        }
     });
 }
 
@@ -353,86 +454,53 @@ function renderAnalyticsCharts() {
     const rows = document.querySelectorAll("#requestsTable tbody tr");
     if (!rows.length) return;
 
-    const st = {}, dt = {};
+    const statusData = {};
+    const dateData = {};
 
     rows.forEach(r => {
-        const c = r.children;
-        const status = c[6]?.textContent?.trim() || "-";
-        const d = c[c.length - 1]?.textContent?.trim() || "";
-        const [dd, mm, yy] = d.split(".");
-        const key = `${yy}-${mm}-${dd}`;
+        const cols = r.children;
+        const status = cols[6].textContent.trim();
+        const date = cols[cols.length - 1].textContent.trim();
 
-        st[status] = (st[status] || 0) + 1;
-        dt[key] = (dt[key] || 0) + 1;
+        statusData[status] = (statusData[status] || 0) + 1;
+
+        const key = date.split(".").reverse().join("-");
+        dateData[key] = (dateData[key] || 0) + 1;
     });
 
-    const dates = Object.keys(dt).sort((a, b) => new Date(a) - new Date(b));
-    const values = dates.map(d => dt[d]);
+    const ctxStatus = document.getElementById("chartStatus");
+    const ctxDates = document.getElementById("chartDates");
 
-    const colors = {
-        created: "#60a5fa",
-        inwork: "#facc15",
-        done: "#22c55e",
-        cancelled: "#ef4444",
-        gradientTop: "rgba(59,130,246,0.35)",
-        gradientBottom: "rgba(59,130,246,0.05)",
-        default: "#94a3b8"
-    };
+    const statuses = Object.keys(statusData);
+    const statusValues = Object.values(statusData);
 
-    const map = {
-        "Создана": colors.created,
-        "В работе": colors.inwork,
-        "Завершена": colors.done,
-        "Отменена": colors.cancelled
-    };
-
-    new Chart(document.getElementById("chartStatus"), {
+    new Chart(ctxStatus, {
         type: "doughnut",
         data: {
-            labels: Object.keys(st),
+            labels: statuses,
             datasets: [{
-                data: Object.values(st),
-                backgroundColor: Object.keys(st).map(s => map[s] || colors.default),
-                borderWidth: 0
+                data: statusValues,
+                backgroundColor: ["#60a5fa", "#facc15", "#22c55e", "#ef4444"]
             }]
         },
-        options: {
-            cutout: "70%",
-            maintainAspectRatio: false,
-            plugins: { legend: { position: "bottom", labels: { color: "#475569", boxWidth: 10, font: { size: 12 } } } },
-            animation: { duration: 900, easing: "easeOutQuart" }
-        }
+        options: { cutout: "70%" }
     });
 
-    const ctx = document.getElementById("chartDates").getContext("2d");
-    const grad = ctx.createLinearGradient(0, 0, 0, 220);
-    grad.addColorStop(0, colors.gradientTop);
-    grad.addColorStop(1, colors.gradientBottom);
+    const sortedDates = Object.keys(dateData).sort();
+    const dateValues = sortedDates.map(d => dateData[d]);
 
-    new Chart(ctx, {
+    new Chart(ctxDates, {
         type: "line",
         data: {
-            labels: dates.map(x => x.split("-").reverse().join(".")),
+            labels: sortedDates.map(d => d.split("-").reverse().join(".")),
             datasets: [{
                 label: "Количество заявок",
-                data: values,
+                data: dateValues,
                 borderColor: "#3b82f6",
-                backgroundColor: grad,
-                tension: 0.35,
-                fill: true,
-                pointRadius: 4,
-                pointBackgroundColor: "#2563eb",
-                pointHoverRadius: 6,
-                pointHoverBackgroundColor: "#1d4ed8"
+                tension: 0.3,
+                fill: true
             }]
         },
-        options: {
-            plugins: { legend: { display: false } },
-            scales: {
-                x: { ticks: { color: "#475569", font: { size: 11 } }, grid: { display: false } },
-                y: { beginAtZero: true, ticks: { color: "#64748b", stepSize: 1 }, grid: { color: "#f1f5f9" } }
-            },
-            animation: { duration: 900, easing: "easeOutQuart" }
-        }
+        options: { responsive: true }
     });
 }
