@@ -1,0 +1,108 @@
+﻿/* Общие стили */
+body {
+    font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
+    background-color: #f5f7fa;
+    color: #003049;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+/* Центрирование формы */
+.auth-wrapper {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Карточка */
+.auth-card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 48px 40px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+    width: 380px;
+    max-width: 90%;
+    text-align: center;
+    transition: 0.3s ease;
+}
+
+    .auth-card:hover {
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
+    }
+
+/* Заголовки */
+.auth-title {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #003049;
+}
+
+.auth-subtitle {
+    font-size: 15px;
+    font-weight: 400;
+    color: #787486;
+    margin-bottom: 30px;
+}
+
+/* Поля */
+.form-input {
+    width: 100%;
+    padding: 14px;
+    margin-bottom: 18px;
+    border: 1px solid #d6d8dc;
+    border-radius: 10px;
+    background-color: #fdfdfd;
+    font-size: 15px;
+    color: #003049;
+    outline: none;
+    transition: 0.2s ease;
+}
+
+    .form-input::placeholder {
+        color: #a0a0a0;
+    }
+
+    .form-input:focus {
+        border-color: #003049;
+        box-shadow: 0 0 4px rgba(0, 48, 73, 0.2);
+    }
+
+/* Кнопка */
+.btn-login {
+    background-color: #003049;
+    color: #fff;
+    border: none;
+    width: 100%;
+    padding: 14px;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: 0.3s ease;
+}
+
+    .btn-login:hover {
+        background-color: #004d6f;
+        transform: translateY(-2px);
+    }
+
+/* Ошибки */
+.error-message {
+    color: #780000;
+    font-size: 14px;
+    margin-top: 6px;
+    display: block;
+}
+
+/* Текст */
+.info-text {
+    font-size: 13px;
+    color: #787486;
+    margin-top: 24px;
+}

@@ -1,0 +1,11 @@
+﻿@page
+@model diplom_1.Pages.IndexModel
+@{
+    ViewData["Title"] = "Главная";
+}
+
+<h2>Добро пожаловать, @Model.Username!</h2>
+
+<form method="post" asp-page-handler="Logout">
+    <button type="submit" formaction="/Logout">Выйти</button>
+</form>

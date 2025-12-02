@@ -1,0 +1,90 @@
+﻿@using Microsoft.AspNetCore.Http
+@inject IHttpContextAccessor HttpContextAccessor
+
+@{
+    var httpContext = HttpContextAccessor.HttpContext;
+    var currentPath = httpContext?.Request.Path.Value ?? "";
+    var fullName = httpContext?.Session.GetString("FullName") ?? "";
+    var photoPath = httpContext?.Session.GetString("PhotoPath") ?? "~/icons/default-avatar.png";
+
+    var modulesStr = httpContext?.Session.GetString("UserModules") ?? "";
+    var modules = modulesStr.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();
+}
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Панель управления</title>
+    <link rel="stylesheet" href="~/css/_DashboardLayout.css" asp-append-version="true" />
+    <script defer src="~/js/sidebar-toggle.js" asp-append-version="true"></script>
+    @RenderSection("Styles", required: false)
+</head>
+<body>
+    <div class="dashboard">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-top">
+                <span class="sidebar-title">Меню</span>
+            </div>
+
+            <nav class="menu">
+                <a asp-page="/Dashboard/Dashboard" class="menu-item @(currentPath.Contains("/Dashboard") ? "active" : "")" title="Главная">
+                    <img src="~/icons/home.svg" class="menu-icon" />
+                    <span>Главная</span>
+                </a>
+
+                @if (modules.Contains("Задачи"))
+                {
+                    <a asp-page="/Requests/Requests" class="menu-item @(currentPath.StartsWith("/Requests") ? "active" : "")" title="Заявки">
+                        <img src="~/icons/requests.svg" class="menu-icon" />
+                        <span>Заявки</span>
+                    </a>
+                }
+
+                @if (modules.Contains("Лицензии"))
+                {
+                    <a asp-page="/Licenses/Licenses" class="menu-item @(currentPath.StartsWith("/Licenses") ? "active" : "")" title="Лицензии">
+                        <img src="~/icons/license.svg" class="menu-icon" />
+                        <span>Лицензии</span>
+                    </a>
+                }
+
+                @if (modules.Contains("Пользователи"))
+                {
+                    <a asp-page="/Users/Users" class="menu-item @(currentPath.Contains("/Users") ? "active" : "")" title="Администрирование">
+                        <img src="~/icons/users.svg" class="menu-icon" />
+                        <span>Управление</span>
+                    </a>
+                }
+            </nav>
+
+            <!-- кнопка стрелки -->
+            <button id="sidebarToggle" class="sidebar-toggle" title="Свернуть меню">
+                <svg class="arrow-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="#475569">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+        </aside>
+
+        <div class="main">
+            <header class="topbar">
+                <div class="user-left">
+                    <img src="@Url.Content(photoPath)" alt="Фото" class="avatar" />
+                    <span class="user-name">@fullName</span>
+                </div>
+                <form method="get" asp-page="/Logout">
+                    <button type="submit" class="logout-btn">Выйти</button>
+                </form>
+            </header>
+
+            <main class="content">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+</body>
+
+@RenderSection("Scripts", required: false)
+
+</html>

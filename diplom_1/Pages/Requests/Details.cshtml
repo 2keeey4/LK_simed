@@ -1,0 +1,155 @@
+﻿@page "{id:int}"
+@using System.IO
+@model diplom_1.Pages.Requests.DetailsModel
+@{
+    ViewData["Title"] = "Информация о заявке";
+    Layout = "_DashboardLayout";
+
+    // Получаем текущего пользователя из сессии
+    var currentUserId = HttpContext.Session.GetInt32("UserId");
+}
+
+<link rel="stylesheet" href="~/css/requestDetails.css" />
+<script defer src="~/js/requestDetails.js"></script>
+
+<div class="page-wrapper">
+
+    <!-- Основная информация -->
+    <section class="request-section">
+        <h2>Информация о заявке</h2>
+
+        <div class="request-card">
+            <div class="info-row">
+                <div>
+                    <label>Заголовок</label>
+                    <p>@Model.Request.Title</p>
+                </div>
+
+                <div>
+                    <label class="label-with-icon">
+                        Тема
+                        <button type="button" class="edit-btn" data-field="topic" title="Редактировать тему">
+                            <img src="~/icons/arrow-square-up.svg" alt="Редактировать" class="edit-icon" />
+                        </button>
+                    </label>
+                    <p id="topicDisplay">@Model.Request.Topic</p>
+                </div>
+
+
+                <div>
+                    <label>Продукт</label>
+                    <p>@(Model.Request.Product?.Name ?? "-")</p>
+                </div>
+
+                <div>
+                    <label>Организация</label>
+                    <p>@(Model.Request.Organization?.Name ?? "-")</p>
+                </div>
+
+                <div>
+                    <label>Филиал</label>
+                    <p>@(Model.Request.Branch?.Address ?? "-")</p>
+                </div>
+
+                <div>
+                    <label>Приоритет</label>
+                    <p class="priority">@Model.Request.Priority</p>
+                </div>
+
+                <div>
+                    <label class="label-with-icon">
+                        Статус
+                        <button type="button" class="edit-btn" data-field="status" title="Редактировать статус">
+                            <img src="~/icons/arrow-square-up.svg" alt="Редактировать" class="edit-icon" />
+                        </button>
+                    </label>
+                    <p id="statusDisplay">@Model.Request.Status</p>
+                </div>
+
+
+
+                <div>
+                    <label>Дата</label>
+                    <p>@Model.Request.CreatedAt.ToString("dd.MM.yyyy HH:mm")</p>
+                </div>
+            </div>
+
+
+            <div class="desc">
+                <label>Описание</label>
+                <p>@(string.IsNullOrWhiteSpace(Model.Request.Description) ? "—" : Model.Request.Description)</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 🔹 Комментарии -->
+    <section class="comments-section">
+        <h2>Комментарии</h2>
+
+        @if (!Model.Comments.Any())
+        {
+            <p class="no-comments">Комментариев пока нет</p>
+        }
+        else
+        {
+            <div class="comments-feed">
+                @foreach (var c in Model.Comments)
+                {
+                    bool isMy = currentUserId.HasValue && c.AuthorId == currentUserId.Value;
+
+                    <div class="comment-line @(isMy ? "my" : "other")">
+                        <div class="comment-bubble @(isMy ? "mine" : "others")">
+                            <div class="header">
+                                <span class="author">@c.Author?.FullName</span>
+                                <span class="time">@c.CreatedAt.ToString("dd.MM.yy HH:mm")</span>
+                            </div>
+                            <div class="text">@c.Content</div>
+
+                            @if (c.Attachments.Any())
+                            {
+                                <div class="files">
+                                    @foreach (var a in c.Attachments)
+                                    {
+                                        <a href="@a.FilePath" target="_blank">@System.IO.Path.GetFileName(a.FilePath)</a>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+</div>
+
+<!-- Кнопка добавления комментария -->
+<div class="comment-add-bar">
+    <button id="openCommentModal" type="button" class="btn primary">Добавить комментарий</button>
+</div>
+
+<!--  Модалка -->
+<div id="commentModal" class="modal hidden">
+    <div class="modal-box">
+        <button type="button" id="closeCommentModal" class="close-button">✕</button>
+
+        <h3>Добавить комментарий</h3>
+        <form method="post" enctype="multipart/form-data" asp-page-handler="AddComment">
+            <textarea name="NewCommentContent" rows="4" placeholder="Введите комментарий..." required></textarea>
+
+            <div class="form-row">
+                <label class="file-upload">
+                    <input type="file" name="UploadFile" hidden />
+                    <span>Прикрепить файл</span>
+                </label>
+                <label class="checkbox">
+                    <input type="checkbox" name="IsInternal" /> Внутренний комментарий
+                </label>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" id="cancelComment" class="btn secondary">Отмена</button>
+                <button type="submit" class="btn primary">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>

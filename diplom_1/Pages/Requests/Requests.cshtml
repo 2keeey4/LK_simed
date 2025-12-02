@@ -1,0 +1,353 @@
+﻿@page
+@model diplom_1.Pages.Requests.RequestsModel
+@{
+    ViewData["Title"] = "Заявки";
+    Layout = "_DashboardLayout";
+}
+
+<link rel="stylesheet" href="~/css/requests.css" />
+<script defer src="~/js/requests.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="admin-container">
+    <h2 class="page-title">Заявки</h2>
+
+    <!--  СТАТИСТИКА  -->
+    <div class="stats-row">
+        @if (Model.CanSeeStatistics)
+        {
+            <div class="stat-card total">
+                <div class="stat-title">Всего заявок</div>
+                <div class="stat-value">@Model.TotalCount</div>
+            </div>
+            <div class="stat-card created">
+                <div class="stat-title">Создано</div>
+                <div class="stat-value">@Model.CreatedCount</div>
+            </div>
+            <div class="stat-card inwork">
+                <div class="stat-title">В работе</div>
+                <div class="stat-value">@Model.InWorkCount</div>
+            </div>
+            <div class="stat-card done">
+                <div class="stat-title">Завершено</div>
+                <div class="stat-value">@Model.DoneCount</div>
+            </div>
+            <div class="stat-card cancelled">
+                <div class="stat-title">Отменено</div>
+                <div class="stat-value">@Model.CancelledCount</div>
+            </div>
+        }
+        else
+        {
+            <div class="no-stats">У вас нет доступа к статистике</div>
+        }
+    </div>
+
+    <!--  АНАЛИТИКА  -->
+    @if (Model.CanSeeAnalytics)
+    {
+        <div class="analytics-header">
+            <button id="toggleAnalyticsBtn" class="analytics-toggle">Показать аналитику</button>
+        </div>
+
+        <div id="analyticsSection" class="analytics-section collapsed">
+            <div class="analytics-container two-charts">
+                <div class="chart-card donut">
+                    <h4>По статусам</h4>
+                    <canvas id="chartStatus"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h4>Динамика заявок по датам</h4>
+                    <canvas id="chartDates"></canvas>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!--  ФИЛЬТРЫ + ПОИСК  -->
+    <div class="filters-header">
+        <div class="filter-group">
+            <button class="btn secondary" id="toggleFiltersBtn">Фильтры</button>
+            <input type="text" id="searchInput" class="search-input" placeholder="Поиск по заголовку..." />
+        </div>
+
+        @if (Model.CanCreate)
+        {
+            <div>
+                <button class="btn primary" id="btnCreateRequest">Создать заявку</button>
+            </div>
+        }
+    </div>
+
+    <!--  ПАНЕЛЬ ФИЛЬТРОВ  -->
+    <div id="filtersPanel" class="filters-panel hidden">
+        <div class="filters-grid">
+
+            <!-- Организация -->
+            <div class="filter-block">
+                <label>Организация</label>
+                <div class="dropdown">
+                    <div class="dropdown-toggle" id="orgFilterToggle">Все организации</div>
+                    <div class="dropdown-menu hidden" id="orgFilterMenu">
+                        <label><input type="checkbox" value="all" checked /> Все</label>
+                        @foreach (var org in Model.FilterOrganizations)
+                        {
+                            <label><input type="checkbox" class="filter-org" value="@org.Id" /> @org.Name</label>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Филиал -->
+            <div class="filter-block">
+                <label>Филиал</label>
+                <div class="dropdown">
+                    <div class="dropdown-toggle" id="branchFilterToggle">Все филиалы</div>
+                    <div class="dropdown-menu hidden" id="branchFilterMenu">
+                        <label><input type="checkbox" value="all" checked /> Все</label>
+                        @foreach (var br in Model.FilterBranches)
+                        {
+                            <label><input type="checkbox" class="filter-branch" value="@br.Id" /> @br.Address</label>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Продукт -->
+            <div class="filter-block">
+                <label>Продукт</label>
+                <div class="dropdown">
+                    <div class="dropdown-toggle" id="productFilterToggle">Все продукты</div>
+                    <div class="dropdown-menu hidden" id="productFilterMenu">
+                        <label><input type="checkbox" value="all" checked /> Все</label>
+                        @foreach (var p in Model.Products)
+                        {
+                            <label><input type="checkbox" class="filter-product" value="@p.Id" /> @p.Name</label>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Статус -->
+            <div class="filter-block">
+                <label>Статус</label>
+                <div class="dropdown">
+                    <div class="dropdown-toggle" id="statusFilterToggle">Все статусы</div>
+                    <div class="dropdown-menu hidden" id="statusFilterMenu">
+                        <label><input type="checkbox" value="all" checked /> Все</label>
+                        @foreach (var s in Model.Statuses)
+                        {
+                            <label><input type="checkbox" class="filter-status" value="@s" /> @s</label>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Клиент (только отображение в фильтрах, не в форме) -->
+            @if (Model.CanSeeClientColumn)
+            {
+                <div class="filter-block">
+                    <label>Клиент</label>
+                    <div class="dropdown">
+                        <div class="dropdown-toggle" id="clientFilterToggle">Все клиенты</div>
+                        <div class="dropdown-menu hidden" id="clientFilterMenu">
+                            <label><input type="checkbox" value="all" checked /> Все</label>
+                            @foreach (var client in Model.Requests.Select(r => r.ClientName).Distinct().Where(c => !string.IsNullOrWhiteSpace(c)))
+                            {
+                                <label><input type="checkbox" class="filter-client" value="@client" /> @client</label>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Период -->
+            <div class="filter-block">
+                <label>Период</label>
+                <div class="date-range">
+                    <input type="date" id="dateFrom" />
+                    <span>–</span>
+                    <input type="date" id="dateTo" />
+                </div>
+            </div>
+
+        </div>
+
+        <div class="filters-actions">
+            <button class="btn secondary" id="clearFiltersBtn">Сбросить</button>
+            <button class="btn primary" id="applyFiltersBtn">Применить</button>
+        </div>
+    </div>
+
+    <!--  ТАБЛИЦА  -->
+    <div class="table-wrapper">
+        <table class="main-table" id="requestsTable">
+            <thead>
+                <tr>
+                    <th>Заголовок</th>
+                    <th>Тема</th>
+                    <th>Организация</th>
+                    <th>Филиал</th>
+                    <th>Продукт</th>
+                    <th>Приоритет</th>
+                    <th>Статус</th>
+                    @if (Model.CanSeeClientColumn)
+                    {
+                        <th>Клиент</th>
+                    }
+                    <th>Дата создания</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in Model.Requests)
+                {
+                    <tr data-request-id="@r.Id">
+                        <td>@r.Title</td>
+                        <td>@r.Topic</td>
+                        <td>@r.OrganizationName</td>
+                        <td>@r.BranchAddress</td>
+                        <td>@r.ProductName</td>
+                        <td>@r.Priority</td>
+                        <td><span class="status-badge status-@r.Status.ToLower().Replace(" ", "-")">@r.Status</span></td>
+                        @if (Model.CanSeeClientColumn)
+                        {
+                            <td>@r.ClientName</td>
+                        }
+                        <td>@r.CreatedAt.ToString("dd.MM.yyyy")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!--  МОДАЛЬНОЕ ОКНО СОЗДАНИЯ  -->
+    @if (Model.CanCreate)
+    {
+        <div id="createModal" class="modal hidden">
+            <div class="modal-overlay"></div>
+            <div class="modal-window">
+                <div class="modal-header">
+                    <h2>Создать заявку</h2>
+                    <button id="closeModalBtn" class="modal-close">&times;</button>
+                </div>
+
+                <form id="createRequestForm" class="modal-body" enctype="multipart/form-data">
+
+                    <!-- Заголовок + тема -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Заголовок</label>
+                            <input type="text" id="reqTitle" required />
+                        </div>
+
+                        <div class="form-group">
+                            <label>Тема</label>
+                            <select id="reqTopic" required>
+                                <option value="">Выберите тему</option>
+                                <option>Изменение интерфейса</option>
+                                <option>Исправление ошибок</option>
+                                <option>Улучшение аналитики</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Организация + филиал -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Организация</label>
+                            <select id="reqOrganization" required>
+                                <option value="">Выберите организацию</option>
+                                @foreach (var org in Model.CreateOrganizations)
+                                {
+                                    <option value="@org.Id">@org.Name</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Филиал</label>
+                            <select id="reqBranch">
+                                <option value="">Выберите филиал (необязательно)</option>
+                                @foreach (var br in Model.CreateBranches)
+                                {
+                                    <option value="@br.Id">@br.Address</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Продукт + приоритет -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Продукт</label>
+                            <select id="reqProduct" required>
+                                <option value="">Выберите продукт</option>
+                                @foreach (var p in Model.Products)
+                                {
+                                    <option value="@p.Id">@p.Name</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Приоритет</label>
+                            <select id="reqPriority" required>
+                                <option value="">Выберите приоритет</option>
+                                <option>Низкий</option>
+                                <option>Средний</option>
+                                <option>Высокий</option>
+                                <option>Критический</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Создать от имени -->
+                    @if (Model.CanCreateForOthers)
+                    {
+                        <div class="form-row">
+                            <div class="form-group full">
+                                <label>Создать от имени</label>
+                                <select id="reqCreatedBy" required>
+                                    <option value="">Выберите пользователя</option>
+                                </select>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <input type="hidden" id="reqCreatedBy" value="@Model.CurrentUserId" />
+                    }
+
+                    <!-- Вложение -->
+                    <div class="form-row">
+                        <div class="form-group full">
+                            <label>Вложение</label>
+                            <input type="file" id="reqFile" accept=".jpg,.png,.pdf,.docx" />
+                        </div>
+                    </div>
+
+                    <!-- Описание -->
+                    <div class="form-group full">
+                        <label>Описание</label>
+                        <textarea id="reqDescription" rows="4"></textarea>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" id="cancelModalBtn" class="btn secondary">Отмена</button>
+                        <button type="submit" class="btn primary">Сохранить</button>
+                    </div>
+
+                </form>
+
+            </div>
+        </div>
+    }
+</div>
+
+<form id="antiForgeryForm" method="post">
+    @Html.AntiForgeryToken()
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

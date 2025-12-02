@@ -1,0 +1,142 @@
+﻿body {
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    background-color: #f8fafc;
+    color: #222;
+}
+
+.app-container {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* ===== Sidebar ===== */
+.sidebar {
+    width: 250px;
+    background: #ffffff;
+    border-right: 1px solid #e5e7eb;
+    padding: 25px 15px;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.04);
+}
+
+.sidebar-title {
+    font-weight: 600;
+    font-size: 1.2rem;
+    margin-bottom: 20px;
+    color: #003049;
+}
+
+.menu {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: #374151;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+    .menu-item:hover {
+        background: #f3f4f6;
+    }
+
+    .menu-item.active {
+        background: #2563eb;
+        color: #fff;
+    }
+
+/* ===== Topbar ===== */
+.topbar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 15px 25px;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-right: 15px;
+}
+
+.user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.logout-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+    .logout-btn img {
+        width: 22px;
+    }
+
+/* ===== Content ===== */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-content {
+    padding: 30px;
+}
+
+/* ===== Role switch ===== */
+.role-switch-form {
+    margin-right: 20px;
+    position: relative;
+}
+
+.role-dropdown {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding: 8px 35px 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background-color: #ffffff;
+    color: #111827;
+    font-size: 14px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+    .role-dropdown:hover {
+        border-color: #93c5fd;
+    }
+
+    .role-dropdown:focus {
+        outline: none;
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+    }
+
+/* Dropdown arrow */
+.select-wrapper::after {
+    content: "▼";
+    font-size: 0.6rem;
+    color: #555;
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+}

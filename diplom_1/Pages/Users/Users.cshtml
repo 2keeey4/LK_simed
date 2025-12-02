@@ -1,0 +1,275 @@
+﻿@page
+@model diplom_1.Pages.Users.UsersModel
+@{
+    ViewData["Title"] = "Администрирование";
+    Layout = "_DashboardLayout";
+}
+
+<link rel="stylesheet" href="~/css/users.css" />
+<script defer src="~/js/users.js"></script>
+
+<div class="admin-container">
+    <h2>Администрирование</h2>
+
+    <!-- Главные вкладки -->
+    <div class="main-tabs">
+        <button class="main-tab active" data-tab="tab-users">Пользователи</button>
+        <button class="main-tab" data-tab="tab-orgs">Организации</button>
+        <button class="main-tab" data-tab="tab-branches">Филиалы</button>
+    </div>
+
+    <!-- ==== ВКЛАДКА ПОЛЬЗОВАТЕЛИ ==== -->
+    <div id="tab-users" class="tab-section active">
+        <div class="section-header">
+            <div class="filter-group">
+                <input type="text" id="searchUser" name="fakeSearchUser"
+                <input type="text" id="searchUser" data-real="1"
+                       placeholder="Поиск по ФИО, логину, email..."
+                       class="search-input"
+                       autocomplete="nope"
+                       name="no_autofill"
+                       inputmode="search"
+                       autocorrect="off" autocapitalize="off" spellcheck="false" />
+
+
+                <button class="btn secondary" id="sortUsers">Сортировать A–Я</button>
+            </div>
+            <button class="btn primary" id="btnAddUser">Добавить пользователя</button>
+        </div>
+
+        <table class="main-table" id="usersTable">
+            <thead>
+                <tr>
+                    <th>ФИО</th>
+                    <th>Логин</th>
+                    <th>Email</th>
+                    <th>Организации</th>
+                    <th>Филиалы</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var user in Model.Users)
+                {
+                    <tr data-user-id="@user.Id">
+                        <td>@user.FullName</td>
+                        <td>@user.Login</td>
+                        <td>@user.Email</td>
+                        <td>@string.Join(", ", user.Organizations)</td>
+                        <td>@string.Join(", ", user.Branches)</td>
+                        <td><button class="btn small danger delete-user">Удалить</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ==== ВКЛАДКА ОРГАНИЗАЦИИ ==== -->
+    <div id="tab-orgs" class="tab-section">
+        <div class="section-header">
+            <div class="filter-group">
+                <input type="text" id="searchOrg" autocomplete="off" placeholder="Поиск по названию..." class="search-input" />
+                <button class="btn secondary" id="sortOrgs">Сортировать A–Я</button>
+            </div>
+            <button class="btn primary" id="btnAddOrg">Добавить организацию</button>
+        </div>
+        <table class="main-table">
+            <thead>
+                <tr>
+                    <th>Название</th>
+                    <th>ИНН</th>
+                    <th>КПП</th>
+                    <th>ОГРН</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="orgsBody"></tbody>
+        </table>
+    </div>
+
+    <!-- ==== ВКЛАДКА ФИЛИАЛЫ ==== -->
+    <div id="tab-branches" class="tab-section">
+        <div class="section-header">
+            <div class="filter-group">
+                <!-- выпадающий фильтр -->
+                <div class="dropdown">
+                    <button class="btn secondary dropdown-toggle" id="branchOrgFilterBtn">
+                        Фильтр организаций ▾
+                    </button>
+                    <div class="dropdown-menu hidden" id="branchOrgFilterDropdown">
+                        <label><input type="checkbox" value="all" checked> Все организации</label>
+                        <!-- чекбоксы организаций будут подставлены JS -->
+                    </div>
+                </div>
+
+                <input type="text" id="searchBranch" autocomplete="off"  placeholder="Поиск по названию филиала..." class="search-input" />
+                <button class="btn secondary" id="sortBranches">Сортировать A–Я</button>
+            </div>
+            <button class="btn primary" id="btnAddBranch">Добавить филиал</button>
+        </div>
+
+        <table class="main-table">
+            <thead>
+                <tr>
+                    <th>Адрес</th>
+                    <th>Организация</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="branchesBody"></tbody>
+        </table>
+    </div>
+
+</div>
+
+<!-- ===== МОДАЛКА ПОЛЬЗОВАТЕЛЯ ===== -->
+<div id="userModal" class="modal">
+    <div class="modal-content large" id="userModalContent">
+        <span class="close" id="closeModal">&times;</span>
+
+        <div class="modal-header">
+            <h3 id="modalTitle">Редактирование пользователя</h3>
+        </div>
+
+        <div class="modal-tabs">
+            <button class="tab-button active" data-tab="tab-general">Основное</button>
+            <button class="tab-button" data-tab="tab-permissions">Права</button>
+        </div>
+
+        <!--  ОСНОВНОЕ  -->
+        <div class="tab-content active" id="tab-general">
+            <div class="user-summary">
+                <div class="photo-section">
+                    <img id="photoPreview" src="~/icons/default-avatar.png"
+                         alt="Фото пользователя"
+                         class="photo-preview" />
+                    <label class="photo-upload-label">
+                        <input type="file" id="userPhoto" accept="image/*" hidden />
+                        <button type="button" class="btn small secondary" id="uploadPhotoBtn">Загрузить фото</button>
+                    </label>
+                </div>
+
+                <div class="fields-section">
+                    <label>ФИО <input type="text" id="fullName" /></label>
+                    <label>Email <input type="email" id="email" /></label>
+                    <label>Логин <input type="text" id="login" /></label>
+
+                    <label>
+                        Пароль
+                        <div class="password-wrapper">
+                            <input type="password" id="password" />
+                            <button type="button" class="btn small secondary" id="generatePassword">Сгенерировать</button>
+                            <button type="button" class="btn small secondary" id="togglePassword">Показать</button>
+                        </div>
+                    </label>
+
+                    <label class="send-email-label">
+                        <input type="checkbox" id="sendEmail" /> Отправить данные на email
+                    </label>
+                </div>
+            </div>
+
+
+            <div class="user-organizations">
+                <h4>Организации и филиалы</h4>
+                <div id="organizationsList"></div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn primary" id="nextToPermissions">Далее</button>
+            </div>
+        </div>
+
+        <!--  ПРАВА  -->
+        <div class="tab-content" id="tab-permissions">
+            <div class="permissions-header">
+                <div class="pattern-buttons">
+                    <button class="btn small secondary pattern-btn" data-role="1">Администратор</button>
+                    <button class="btn small secondary pattern-btn" data-role="2">Директор</button>
+                    <button class="btn small secondary pattern-btn" data-role="3">Врач</button>
+                    <button class="btn small secondary pattern-btn" data-role="4">Менеджер</button>
+                    <button class="btn small secondary pattern-btn" data-role="5">Программист</button>
+                    <button class="btn small secondary pattern-btn" data-role="6">Техподдержка</button>
+                    <button class="btn small secondary pattern-btn" data-role="7">Бухгалтер</button>
+                </div>
+
+                <div class="apply-all">
+                    <button class="btn small" id="openGlobalSelector">Выбрать организации и филиалы</button>
+                    <button class="btn primary" id="applyToAll">Применить ко всем</button>
+                </div>
+            </div>
+
+            <div id="permissionsContainer" class="permissions-container"></div>
+
+            <div class="modal-actions">
+                <button class="btn secondary" id="backToGeneral">Назад</button>
+                <button class="btn primary" id="saveUserBtn">Сохранить</button>
+                <button class="btn danger" id="cancelUserBtn">Отмена</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== МОДАЛКА ОРГАНИЗАЦИЙ ===== -->
+<div id="orgModal" class="modal">
+    <div class="modal-content medium">
+        <span class="close" id="closeOrgModal">&times;</span>
+        <h3 id="orgModalTitle">Добавить организацию</h3>
+
+        <div class="form-group">
+            <label>Название <input type="text" id="orgName" /></label>
+            <label>ИНН <input type="text" id="orgInn" /></label>
+            <label>КПП <input type="text" id="orgKpp" /></label>
+            <label>ОГРН <input type="text" id="orgOgrn" /></label>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn primary" id="saveOrgBtn">Сохранить</button>
+            <button class="btn secondary" id="cancelOrgBtn">Отмена</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== МОДАЛКА ФИЛИАЛОВ ===== -->
+<div id="branchModal" class="modal">
+    <div class="modal-content medium">
+        <span class="close" id="closeBranchModal">&times;</span>
+        <h3 id="branchModalTitle">Добавить филиал</h3>
+
+        <div class="form-group">
+            <label>Адрес филиала <input type="text" id="branchAddress" /></label>
+            <label>
+                Организация
+                <select id="branchOrgSelect"></select>
+            </label>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn primary" id="saveBranchBtn">Сохранить</button>
+            <button class="btn secondary" id="cancelBranchBtn">Отмена</button>
+        </div>
+    </div>
+</div>
+
+
+<!--  МИНИ-МОДАЛКА ДЛЯ ВЫБОРА ОРГАНИЗАЦИЙ/ФИЛИАЛОВ  -->
+<div id="orgBranchPopup" class="popup hidden">
+    <div class="popup-content">
+        <div class="popup-header">
+            <h5>Выбор организаций и филиалов</h5>
+            <span class="popup-close" id="closePopup">&times;</span>
+        </div>
+        <div id="popupOrgBranchTree"></div>
+        <div class="popup-actions">
+            <button class="btn primary" id="popupSave">Сохранить</button>
+        </div>
+    </div>
+</div>
+
+<form id="antiForgeryForm" method="post">
+    @Html.AntiForgeryToken()
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

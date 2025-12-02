@@ -1,0 +1,39 @@
+﻿@page
+@model diplom_1.Pages.LoginModel
+@{
+    Layout = null;
+    ViewData["Title"] = "Вход в личный кабинет";
+}
+
+<link rel="stylesheet" href="~/css/login.css" />
+
+<div class="auth-wrapper">
+    <div class="auth-card">
+        <h1 class="auth-title">Личный кабинет</h1>
+        <h2 class="auth-subtitle">Авторизация пользователя</h2>
+
+        <form method="post" class="auth-form">
+            <div class="form-group">
+                <input asp-for="Input.Login" class="form-input" placeholder="Логин" />
+                <span asp-validation-for="Input.Login" class="error-message"></span>
+            </div>
+
+            <div class="form-group">
+                <input asp-for="Input.Password" class="form-input" type="password" placeholder="Пароль" />
+                <span asp-validation-for="Input.Password" class="error-message"></span>
+            </div>
+
+            <button type="submit" class="btn-login">Войти</button>
+
+            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+            {
+                <p class="error-message">@Model.ErrorMessage</p>
+            }
+
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

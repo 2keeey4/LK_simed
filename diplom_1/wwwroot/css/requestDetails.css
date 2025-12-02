@@ -1,0 +1,339 @@
+﻿.page-wrapper {
+    font-family: "Segoe UI", Arial, sans-serif;
+    padding: 24px;
+    color: #1e293b;
+}
+
+/*  Карточка заявки  */
+.request-card {
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    padding: 22px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+}
+
+.info-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 12px 16px;
+}
+
+    .info-row label {
+        font-size: 12.5px;
+        color: #64748b;
+    }
+
+    .info-row p {
+        font-size: 14px;
+        margin: 2px 0 0;
+    }
+
+.priority {
+    color: #16a34a;
+}
+
+.status {
+    color: #2563eb;
+}
+
+.desc {
+    margin-top: 16px;
+    background: #f9fafb;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 14px;
+}
+
+/*  Комментарии  */
+.comments-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.comment-line {
+    display: flex;
+    width: 100%;
+}
+
+    .comment-line.my {
+        justify-content: flex-end;
+    }
+
+    .comment-line.other {
+        justify-content: flex-start;
+    }
+
+.comment-bubble {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 10px 14px;
+    max-width: 70%;
+    background: #fff;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.04);
+    transition: 0.2s;
+}
+
+    .comment-bubble.mine {
+        background: #e8f0ff;
+        border-color: #c7d8ff;
+    }
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.author {
+    font-weight: 600;
+    font-size: 13px;
+    color: #1e293b;
+}
+
+.time {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.text {
+    font-size: 14px;
+    color: #334155;
+}
+
+.files a {
+    font-size: 13px;
+    color: #2563eb;
+    text-decoration: none;
+}
+
+    .files a:hover {
+        text-decoration: underline;
+    }
+
+/*  Модалка  */
+.modal.hidden {
+    display: none;
+}
+
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    animation: fadeIn 0.25s ease;
+}
+
+.modal-box {
+    background: #fff;
+    border-radius: 16px;
+    padding: 26px;
+    width: 100%;
+    max-width: 430px;
+    position: relative;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(25px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+
+
+/*  Поля  */
+textarea {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 14px;
+    resize: none;
+    margin-bottom: 10px;
+}
+
+.form-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+.file-upload span {
+    background: #f1f5f9;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+    .file-upload span:hover {
+        background: #e2e8f0;
+    }
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.btn.primary {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13.5px;
+    cursor: pointer;
+}
+
+    .btn.primary:hover {
+        background: #1d4ed8;
+    }
+
+.btn.secondary {
+    background: #f1f5f9;
+    color: #334155;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+}
+
+    .btn.secondary:hover {
+        background: #e2e8f0;
+    }
+
+
+/*  Кнопка "Добавить комментарий"  */
+.comment-add-bar {
+    width: 100%;
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end; /* кнопка справа */
+}
+
+.comment-add-inner {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+}
+
+/*  Модалка  */
+.modal.hidden {
+    display: none;
+}
+
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.modal-box {
+    background: #fff;
+    border-radius: 12px;
+    padding: 26px;
+    width: 100%;
+    max-width: 420px;
+    position: relative;
+}
+
+/*  Кнопка закрытия  */
+.close-button {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    font-size: 22px;
+    color: #475569;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+    .close-button:hover {
+        color: #1e293b;
+    }
+
+/*  Кнопка редактирования поля  */
+.edit-btn {
+    background: none;
+    border: none;
+    color: #2563eb;
+    font-size: 15px;
+    margin-left: 6px;
+    cursor: pointer;
+    transition: color 0.2s;
+    vertical-align: middle;
+}
+
+    .edit-btn:hover {
+        color: #1e40af;
+    }
+
+
+.label-with-icon {
+    display: inline-flex;
+    align-items: center;       /* Центрирование по вертикали */
+    gap: 4px;
+    font-size: 13px;
+    color: #64748b;
+    line-height: 1.2;
+    vertical-align: middle;
+    margin-bottom: 0;
+}
+
+.edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    vertical-align: middle;
+    position: relative;
+    top: -1px;                 /* 🔹 слегка поднимаем кнопку */
+    transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.edit-btn:hover {
+    transform: scale(1.1);
+    opacity: 0.8;
+}
+
+.edit-icon {
+    width: 13px;               /* 🔹 компактная иконка */
+    height: 13px;
+    display: block;
+    filter: invert(40%) sepia(66%) saturate(1800%) hue-rotate(210deg) brightness(95%) contrast(90%);
+}
