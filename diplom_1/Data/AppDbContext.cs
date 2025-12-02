@@ -17,6 +17,13 @@ namespace diplom_1.Data
         public DbSet<Request> Requests { get; set; }
         public DbSet<Product> Products { get; set; }
 
+        // --- Новые таблицы для лицензий ---
+        public DbSet<Computer> Computers { get; set; }
+        public DbSet<ComputerLicense> ComputerLicenses { get; set; }
+        public DbSet<License> Licenses { get; set; }
+        public DbSet<Edition> Editions { get; set; }
+        public DbSet<Module> Modules { get; set; }
+
         // --- Комментарии и вложения ---
         public DbSet<Comment> Comments { get; set; }
         public DbSet<Attachment> Attachments { get; set; }
@@ -88,7 +95,7 @@ namespace diplom_1.Data
                 .HasForeignKey(up => up.BranchId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // --- RolePermission (пресеты) ---
+            // --- RolePermission ---
             modelBuilder.Entity<RolePermission>()
                 .HasOne(rp => rp.Role)
                 .WithMany(r => r.RolePermissions)
@@ -106,38 +113,38 @@ namespace diplom_1.Data
                 .HasOne(r => r.CreatedBy)
                 .WithMany()
                 .HasForeignKey(r => r.CreatedById)
-                .OnDelete(DeleteBehavior.SetNull); // пользователь удалён → заявка остаётся
+                .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<Request>()
                 .HasOne(r => r.Organization)
                 .WithMany()
                 .HasForeignKey(r => r.OrganizationId)
-                .OnDelete(DeleteBehavior.SetNull); // организация удалена → заявка остаётся
+                .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<Request>()
                 .HasOne(r => r.Branch)
                 .WithMany()
                 .HasForeignKey(r => r.BranchId)
-                .OnDelete(DeleteBehavior.SetNull); // филиал удалён → заявка остаётся
+                .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<Request>()
                 .HasOne(r => r.Product)
                 .WithMany(p => p.Requests)
                 .HasForeignKey(r => r.ProductId)
-                .OnDelete(DeleteBehavior.SetNull); // продукт удалён → заявка остаётся
+                .OnDelete(DeleteBehavior.SetNull);
 
             // --- Comment ---
             modelBuilder.Entity<Comment>()
                 .HasOne(c => c.Request)
                 .WithMany(r => r.Comments)
                 .HasForeignKey(c => c.RequestId)
-                .OnDelete(DeleteBehavior.Cascade); // удаление заявки удаляет комментарии
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<Comment>()
                 .HasOne(c => c.Author)
                 .WithMany()
                 .HasForeignKey(c => c.AuthorId)
-                .OnDelete(DeleteBehavior.SetNull); // удалён автор → комментарий остаётся
+                .OnDelete(DeleteBehavior.SetNull);
 
             // --- Attachment ---
             modelBuilder.Entity<Attachment>()
