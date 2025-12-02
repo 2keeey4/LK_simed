@@ -1,0 +1,325 @@
+﻿@page
+@using diplom_1.Models
+@model diplom_1.Pages.Licenses.LicensesModel
+
+@{
+    Layout = "_DashboardLayout";
+    ViewData["Title"] = "Лицензии";
+}
+
+<!-- ===== Заголовок и кнопка ===== -->
+<div class="page-header d-flex justify-content-between align-items-center mb-4 fade-in">
+    <h2 class="fw-semibold text-dark mb-0">Лицензии</h2>
+    <button class="btn btn-primary rounded-3 px-4 shadow-sm scale-hover" data-bs-toggle="modal" data-bs-target="#addLicenseModal">
+        Добавить лицензию
+    </button>
+</div>
+
+<!-- ===== Карточки статистики ===== -->
+<div class="row g-3 mb-4 fade-in">
+    <div class="col-md-3">
+        <div class="stat-card total">
+            <div class="stat-title">Всего лицензий</div>
+            <div class="stat-value">@((Model.ComputerLicenses != null) ? Model.ComputerLicenses.Count : 0)</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card active">
+            <div class="stat-title">Активных</div>
+            <div class="stat-value">@((Model.ComputerLicenses != null) ? Model.ComputerLicenses.Count(cl => cl.EndDate > DateTime.Now) : 0)</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card warning">
+            <div class="stat-title">Скоро истекают</div>
+            <div class="stat-value">@((Model.ComputerLicenses != null) ? Model.ComputerLicenses.Count(cl => (cl.EndDate - DateTime.Now).TotalDays <= 30 && cl.EndDate > DateTime.Now) : 0)</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card expired">
+            <div class="stat-title">Истёкших</div>
+            <div class="stat-value">@((Model.ComputerLicenses != null) ? Model.ComputerLicenses.Count(cl => cl.EndDate < DateTime.Now) : 0)</div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Таблица ===== -->
+<div class="card shadow-sm border-0 fade-in" style="animation-delay: 0.2s;">
+    <div class="card-body">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Компания</th>
+                    <th>Филиал</th>
+                    <th>Компьютер</th>
+                    <th>Продукт</th>
+                    <th>Лицензия</th>
+                    <th>Дата начала</th>
+                    <th>Дата окончания</th>
+                    <th>Статус</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.ComputerLicenses != null && Model.ComputerLicenses.Any())
+                {
+                    foreach (var cl in Model.ComputerLicenses)
+                    {
+                        var expired = cl.EndDate < DateTime.Now;
+                        var soon = !expired && (cl.EndDate - DateTime.Now).TotalDays < 30;
+                        var statusClass = expired ? "status-expired" : soon ? "status-warning" : "status-active";
+                        var statusText = expired ? "Истекла" : soon ? "Скоро истекает" : "Активна";
+
+                        <tr class="@statusClass row-fade">
+                            <td>@cl.Branch?.Organization?.Name</td>
+                            <td>@cl.Branch?.Address</td>
+                            <td>@cl.ComputerName</td>
+                            <td>@cl.License?.Product?.Name</td>
+                            <td>@cl.License?.Name</td>
+                            <td>@cl.StartDate.ToString("dd.MM.yyyy")</td>
+                            <td>@cl.EndDate.ToString("dd.MM.yyyy")</td>
+                            <td><span class="status-badge @statusClass">@statusText</span></td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr><td colspan="8" class="text-center text-muted py-4">Нет данных</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ===== Модальное окно ===== -->
+<div class="modal fade custom-modal" id="addLicenseModal" tabindex="-1" aria-labelledby="addLicenseLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-sm rounded-4 slide-up">
+            <div class="modal-header" style="background-color:#e9f1ff;">
+                <h5 class="modal-title fw-semibold text-dark">Добавление лицензии</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <form method="post" asp-page-handler="Add">
+                    <div class="row g-3">
+
+                        <div class="col-md-6">
+                            <label class="form-label">Компания</label>
+                            <select asp-for="NewComputerLicense.OrganizationId" id="organizationSelect" class="form-select">
+                                <option value="">Выберите организацию</option>
+                                @{
+                                    var organizations = ViewData["Organizations"] as List<Organization> ?? new();
+                                }
+                                @foreach (var org in organizations)
+                                {
+                                    <option value="@org.Id">@org.Name</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Филиал</label>
+                            <select asp-for="NewComputerLicense.BranchId" id="branchSelect" class="form-select">
+                                <option value="">Сначала выберите компанию</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Имя компьютера</label>
+                            <input asp-for="NewComputerLicense.ComputerName" class="form-control" placeholder="Введите имя компьютера" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Продукт</label>
+                            <select asp-for="NewComputerLicense.ProductId" id="productSelect" class="form-select">
+                                <option value="">Выберите продукт</option>
+                                @{
+                                    var products = ViewData["Products"] as List<Product> ?? new();
+                                }
+                                @foreach (var product in products)
+                                {
+                                    <option value="@product.Id">@product.Name</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Редакция</label>
+                            <select asp-for="NewComputerLicense.EditionId" id="editionSelect" class="form-select">
+                                <option value="">Выберите продукт, чтобы загрузить редакции</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Модуль</label>
+                            <select asp-for="NewComputerLicense.ModuleId" id="moduleSelect" class="form-select">
+                                <option value="">Выберите продукт, чтобы загрузить модули</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Лицензия</label>
+                            <select asp-for="NewComputerLicense.LicenseId" id="licenseSelect" class="form-select">
+                                <option value="">Выберите продукт, чтобы загрузить лицензии</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Дата начала</label>
+                            <input asp-for="NewComputerLicense.StartDate" type="date" class="form-control" value="@DateTime.Now.ToString("yyyy-MM-dd")" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Дата окончания</label>
+                            <input asp-for="NewComputerLicense.EndDate" type="date" class="form-control" value="@DateTime.Now.AddYears(1).ToString("yyyy-MM-dd")" />
+                        </div>
+
+                    </div>
+
+                    <div class="text-end mt-4">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="submit" class="btn btn-primary ms-2 scale-hover">Добавить</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Анимации и стили ===== -->
+<style>
+    .fade-in {
+        opacity: 0;
+        transform: translateY(10px);
+        animation: fadeIn 0.5s ease forwards;
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .row-fade {
+        animation: rowFade 0.4s ease forwards;
+    }
+
+    @@keyframes rowFade {
+        from {
+            opacity: 0;
+            transform: translateY(6px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .custom-modal .modal-dialog {
+        transform: translateY(30px);
+        opacity: 0;
+        transition: all 0.35s ease;
+    }
+
+    .custom-modal.show .modal-dialog {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    .scale-hover {
+        transition: transform 0.2s ease;
+    }
+
+        .scale-hover:hover {
+            transform: scale(1.05);
+        }
+</style>
+
+@section Scripts {
+    @{
+        var jsonOptions = new System.Text.Json.JsonSerializerOptions
+        {
+            ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles,
+            WriteIndented = false
+        };
+
+        var orgJson = System.Text.Json.JsonSerializer.Serialize(
+            (ViewData["Organizations"] as List<Organization> ?? new())
+                .Select(o => new { id = o.Id, name = o.Name }),
+            jsonOptions
+        );
+
+        var branchJson = System.Text.Json.JsonSerializer.Serialize(
+            (ViewData["Branches"] as List<Branch> ?? new())
+                .Select(b => new { id = b.Id, address = b.Address, organizationId = b.OrganizationId }),
+            jsonOptions
+        );
+
+        var prodJson = System.Text.Json.JsonSerializer.Serialize(
+            (ViewData["Products"] as List<Product> ?? new())
+                .Select(p => new { id = p.Id, name = p.Name }),
+            jsonOptions
+        );
+
+        var editionJson = System.Text.Json.JsonSerializer.Serialize(
+            (ViewData["Editions"] as List<Edition> ?? new())
+                .Select(e => new { id = e.Id, name = e.Name, productId = e.ProductId }),
+            jsonOptions
+        );
+
+        var moduleJson = System.Text.Json.JsonSerializer.Serialize(
+            (ViewData["Modules"] as List<Module> ?? new())
+                .Select(m => new { id = m.Id, name = m.Name, productId = m.ProductId }),
+            jsonOptions
+        );
+
+        var licenseJson = System.Text.Json.JsonSerializer.Serialize(
+            (ViewData["Licenses"] as List<License> ?? new())
+                .Select(l => new { id = l.Id, name = l.Name, productId = l.ProductId, editionId = l.EditionId }),
+            jsonOptions
+        );
+    }
+
+    <script>
+        const organizations = @Html.Raw(orgJson);
+        const branches = @Html.Raw(branchJson);
+        const products = @Html.Raw(prodJson);
+        const editions = @Html.Raw(editionJson);
+        const modules = @Html.Raw(moduleJson);
+        const licenses = @Html.Raw(licenseJson);
+
+        document.getElementById("organizationSelect").addEventListener("change", function () {
+            const orgId = parseInt(this.value);
+            const branchSelect = document.getElementById("branchSelect");
+            branchSelect.innerHTML = "<option value=''>Выберите филиал</option>";
+            branches.filter(b => b.organizationId === orgId)
+                .forEach(b => branchSelect.innerHTML += `<option value="${b.id}">${b.address}</option>`);
+        });
+
+        document.getElementById("productSelect").addEventListener("change", function () {
+            const productId = parseInt(this.value);
+            const editionSelect = document.getElementById("editionSelect");
+            const moduleSelect = document.getElementById("moduleSelect");
+            const licenseSelect = document.getElementById("licenseSelect");
+
+            editionSelect.innerHTML = "<option value=''>Выберите редакцию</option>";
+            moduleSelect.innerHTML = "<option value=''>Выберите модуль</option>";
+            licenseSelect.innerHTML = "<option value=''>Выберите лицензию</option>";
+
+            editions.filter(e => e.productId === productId)
+                .forEach(e => editionSelect.innerHTML += `<option value="${e.id}">${e.name}</option>`);
+
+            modules.filter(m => m.productId === productId)
+                .forEach(m => moduleSelect.innerHTML += `<option value="${m.id}">${m.name}</option>`);
+
+            licenses.filter(l => l.productId === productId)
+                .forEach(l => licenseSelect.innerHTML += `<option value="${l.id}">${l.name}</option>`);
+        });
+    </script>
+}
