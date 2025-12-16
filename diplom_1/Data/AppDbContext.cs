@@ -13,26 +13,20 @@ namespace diplom_1.Data
         public DbSet<Branch> Branches { get; set; }
         public DbSet<UserBranch> UserBranches { get; set; }
         public DbSet<UserOrganization> UserOrganizations { get; set; }
-
         public DbSet<Request> Requests { get; set; }
         public DbSet<Product> Products { get; set; }
-
-        // --- Новые таблицы для лицензий ---
         public DbSet<Computer> Computers { get; set; }
         public DbSet<ComputerLicense> ComputerLicenses { get; set; }
         public DbSet<License> Licenses { get; set; }
         public DbSet<Edition> Editions { get; set; }
         public DbSet<Module> Modules { get; set; }
-
-        // --- Комментарии и вложения ---
         public DbSet<Comment> Comments { get; set; }
         public DbSet<Attachment> Attachments { get; set; }
-
-        // --- Система ролей и прав ---
         public DbSet<Permission> Permissions { get; set; }
         public DbSet<UserPermission> UserPermissions { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
+        public DbSet<RequestStatusHistory> RequestStatusHistories { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -66,7 +60,7 @@ namespace diplom_1.Data
 
             modelBuilder.Entity<UserBranch>()
                 .HasOne(ub => ub.Branch)
-                .WithMany(b => b.UserBranches)
+                .WithMany(b => b.UserBranches)  // Обратная связь только с UserBranches
                 .HasForeignKey(ub => ub.BranchId)
                 .OnDelete(DeleteBehavior.Cascade);
 
@@ -108,30 +102,30 @@ namespace diplom_1.Data
                 .HasForeignKey(rp => rp.PermissionId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // --- Request ---
-            modelBuilder.Entity<Request>()
-                .HasOne(r => r.CreatedBy)
-                .WithMany()
-                .HasForeignKey(r => r.CreatedById)
-                .OnDelete(DeleteBehavior.SetNull);
+            // --- Request (ВАЖНОЕ ИСПРАВЛЕНИЕ!) ---
+            modelBuilder.Entity<Request>(entity =>
+            {
+                entity.HasOne(r => r.CreatedBy)
+                    .WithMany()  // НЕТ обратной связи в User
+                    .HasForeignKey(r => r.CreatedById)
+                    .OnDelete(DeleteBehavior.SetNull);
 
-            modelBuilder.Entity<Request>()
-                .HasOne(r => r.Organization)
-                .WithMany()
-                .HasForeignKey(r => r.OrganizationId)
-                .OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(r => r.Organization)
+                    .WithMany()  // НЕТ обратной связи в Organization
+                    .HasForeignKey(r => r.OrganizationId)
+                    .OnDelete(DeleteBehavior.SetNull);
 
-            modelBuilder.Entity<Request>()
-                .HasOne(r => r.Branch)
-                .WithMany()
-                .HasForeignKey(r => r.BranchId)
-                .OnDelete(DeleteBehavior.SetNull);
+                // ⚠️ ВАЖНО: Указываем, что НЕТ обратной связи в Branch
+                entity.HasOne(r => r.Branch)
+                    .WithMany()  // ПУСТО - НЕТ .WithMany(b => b.Requests)
+                    .HasForeignKey(r => r.BranchId)
+                    .OnDelete(DeleteBehavior.SetNull);
 
-            modelBuilder.Entity<Request>()
-                .HasOne(r => r.Product)
-                .WithMany(p => p.Requests)
-                .HasForeignKey(r => r.ProductId)
-                .OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(r => r.Product)
+                    .WithMany(p => p.Requests)  // ЕСТЬ обратная связь в Product
+                    .HasForeignKey(r => r.ProductId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
 
             // --- Comment ---
             modelBuilder.Entity<Comment>()

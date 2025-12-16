@@ -329,6 +329,9 @@ namespace diplom_1.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<double>("WorkHoursLimit")
+                        .HasColumnType("double precision");
+
                     b.HasKey("Id");
 
                     b.ToTable("Organizations");
@@ -386,9 +389,6 @@ namespace diplom_1.Migrations
                     b.Property<int?>("BranchId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("BranchId1")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -425,8 +425,6 @@ namespace diplom_1.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("BranchId1");
-
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("OrganizationId");
@@ -434,6 +432,31 @@ namespace diplom_1.Migrations
                     b.HasIndex("ProductId");
 
                     b.ToTable("Requests");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.RequestStatusHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId");
+
+                    b.ToTable("RequestStatusHistories");
                 });
 
             modelBuilder.Entity("diplom_1.Models.Role", b =>
@@ -734,10 +757,6 @@ namespace diplom_1.Migrations
                         .HasForeignKey("BranchId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("diplom_1.Models.Branch", null)
-                        .WithMany("Requests")
-                        .HasForeignKey("BranchId1");
-
                     b.HasOne("diplom_1.Models.User", "CreatedBy")
                         .WithMany()
                         .HasForeignKey("CreatedById")
@@ -760,6 +779,17 @@ namespace diplom_1.Migrations
                     b.Navigation("Organization");
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.RequestStatusHistory", b =>
+                {
+                    b.HasOne("diplom_1.Models.Request", "Request")
+                        .WithMany("StatusHistory")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Request");
                 });
 
             modelBuilder.Entity("diplom_1.Models.RolePermission", b =>
@@ -854,8 +884,6 @@ namespace diplom_1.Migrations
 
             modelBuilder.Entity("diplom_1.Models.Branch", b =>
                 {
-                    b.Navigation("Requests");
-
                     b.Navigation("UserBranches");
                 });
 
@@ -906,6 +934,8 @@ namespace diplom_1.Migrations
                     b.Navigation("Attachments");
 
                     b.Navigation("Comments");
+
+                    b.Navigation("StatusHistory");
                 });
 
             modelBuilder.Entity("diplom_1.Models.Role", b =>

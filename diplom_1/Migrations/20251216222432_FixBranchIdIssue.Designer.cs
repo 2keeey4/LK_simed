@@ -12,8 +12,8 @@ using diplom_1.Data;
 namespace diplom_1.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251109141804_SyncModelWithDatabase")]
-    partial class SyncModelWithDatabase
+    [Migration("20251216222432_FixBranchIdIssue")]
+    partial class FixBranchIdIssue
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -110,6 +110,200 @@ namespace diplom_1.Migrations
                     b.ToTable("Comments");
                 });
 
+            modelBuilder.Entity("diplom_1.Models.Computer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("BranchId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("LicenseId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("OrganizationId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("LicenseId");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.ToTable("Computers");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.ComputerLicense", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("BranchId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ComputerId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ComputerName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("EditionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("EndDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("LicenseId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ModuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("OrganizationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("ComputerId");
+
+                    b.HasIndex("EditionId");
+
+                    b.HasIndex("LicenseId");
+
+                    b.HasIndex("ModuleId");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("ComputerLicenses");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.Edition", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("Editions");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.License", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Article")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("EditionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PaymentPeriod")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EditionId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("Licenses");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.Module", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Article")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("LicenseId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PaymentPeriod")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LicenseId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("Modules");
+                });
+
             modelBuilder.Entity("diplom_1.Models.Organization", b =>
                 {
                     b.Property<int>("Id")
@@ -137,6 +331,9 @@ namespace diplom_1.Migrations
                     b.Property<string>("OGRN")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<double>("WorkHoursLimit")
+                        .HasColumnType("double precision");
 
                     b.HasKey("Id");
 
@@ -195,9 +392,6 @@ namespace diplom_1.Migrations
                     b.Property<int?>("BranchId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("BranchId1")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -234,8 +428,6 @@ namespace diplom_1.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("BranchId1");
-
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("OrganizationId");
@@ -243,6 +435,31 @@ namespace diplom_1.Migrations
                     b.HasIndex("ProductId");
 
                     b.ToTable("Requests");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.RequestStatusHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId");
+
+                    b.ToTable("RequestStatusHistories");
                 });
 
             modelBuilder.Entity("diplom_1.Models.Role", b =>
@@ -427,16 +644,121 @@ namespace diplom_1.Migrations
                     b.Navigation("Request");
                 });
 
+            modelBuilder.Entity("diplom_1.Models.Computer", b =>
+                {
+                    b.HasOne("diplom_1.Models.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId");
+
+                    b.HasOne("diplom_1.Models.License", "License")
+                        .WithMany()
+                        .HasForeignKey("LicenseId");
+
+                    b.HasOne("diplom_1.Models.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId");
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("License");
+
+                    b.Navigation("Organization");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.ComputerLicense", b =>
+                {
+                    b.HasOne("diplom_1.Models.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId");
+
+                    b.HasOne("diplom_1.Models.Computer", "Computer")
+                        .WithMany()
+                        .HasForeignKey("ComputerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("diplom_1.Models.Edition", "Edition")
+                        .WithMany()
+                        .HasForeignKey("EditionId");
+
+                    b.HasOne("diplom_1.Models.License", "License")
+                        .WithMany("ComputerLicenses")
+                        .HasForeignKey("LicenseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("diplom_1.Models.Module", "Module")
+                        .WithMany()
+                        .HasForeignKey("ModuleId");
+
+                    b.HasOne("diplom_1.Models.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId");
+
+                    b.HasOne("diplom_1.Models.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId");
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("Computer");
+
+                    b.Navigation("Edition");
+
+                    b.Navigation("License");
+
+                    b.Navigation("Module");
+
+                    b.Navigation("Organization");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.Edition", b =>
+                {
+                    b.HasOne("diplom_1.Models.Product", "Product")
+                        .WithMany("Editions")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.License", b =>
+                {
+                    b.HasOne("diplom_1.Models.Edition", "Edition")
+                        .WithMany("Licenses")
+                        .HasForeignKey("EditionId");
+
+                    b.HasOne("diplom_1.Models.Product", "Product")
+                        .WithMany("Licenses")
+                        .HasForeignKey("ProductId");
+
+                    b.Navigation("Edition");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.Module", b =>
+                {
+                    b.HasOne("diplom_1.Models.License", null)
+                        .WithMany("Modules")
+                        .HasForeignKey("LicenseId");
+
+                    b.HasOne("diplom_1.Models.Product", "Product")
+                        .WithMany("Modules")
+                        .HasForeignKey("ProductId");
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("diplom_1.Models.Request", b =>
                 {
                     b.HasOne("diplom_1.Models.Branch", "Branch")
                         .WithMany()
                         .HasForeignKey("BranchId")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("diplom_1.Models.Branch", null)
-                        .WithMany("Requests")
-                        .HasForeignKey("BranchId1");
 
                     b.HasOne("diplom_1.Models.User", "CreatedBy")
                         .WithMany()
@@ -460,6 +782,17 @@ namespace diplom_1.Migrations
                     b.Navigation("Organization");
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.RequestStatusHistory", b =>
+                {
+                    b.HasOne("diplom_1.Models.Request", "Request")
+                        .WithMany("StatusHistory")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Request");
                 });
 
             modelBuilder.Entity("diplom_1.Models.RolePermission", b =>
@@ -554,14 +887,24 @@ namespace diplom_1.Migrations
 
             modelBuilder.Entity("diplom_1.Models.Branch", b =>
                 {
-                    b.Navigation("Requests");
-
                     b.Navigation("UserBranches");
                 });
 
             modelBuilder.Entity("diplom_1.Models.Comment", b =>
                 {
                     b.Navigation("Attachments");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.Edition", b =>
+                {
+                    b.Navigation("Licenses");
+                });
+
+            modelBuilder.Entity("diplom_1.Models.License", b =>
+                {
+                    b.Navigation("ComputerLicenses");
+
+                    b.Navigation("Modules");
                 });
 
             modelBuilder.Entity("diplom_1.Models.Organization", b =>
@@ -580,6 +923,12 @@ namespace diplom_1.Migrations
 
             modelBuilder.Entity("diplom_1.Models.Product", b =>
                 {
+                    b.Navigation("Editions");
+
+                    b.Navigation("Licenses");
+
+                    b.Navigation("Modules");
+
                     b.Navigation("Requests");
                 });
 
@@ -588,6 +937,8 @@ namespace diplom_1.Migrations
                     b.Navigation("Attachments");
 
                     b.Navigation("Comments");
+
+                    b.Navigation("StatusHistory");
                 });
 
             modelBuilder.Entity("diplom_1.Models.Role", b =>

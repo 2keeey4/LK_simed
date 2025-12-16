@@ -21,6 +21,7 @@
     <script defer src="~/js/sidebar-toggle.js" asp-append-version="true"></script>
     @RenderSection("Styles", required: false)
 </head>
+
 <body>
     <div class="dashboard">
         <aside class="sidebar" id="sidebar">
@@ -83,6 +84,10 @@
             </main>
         </div>
     </div>
+    <!-- Добавьте эти строки в секцию head или перед закрывающим тегом body -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.3/jquery.validate.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validation-unobtrusive/3.2.12/jquery.validate.unobtrusive.min.js"></script>
 </body>
 
 @RenderSection("Scripts", required: false)

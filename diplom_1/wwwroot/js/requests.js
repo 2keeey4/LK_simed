@@ -1,21 +1,34 @@
-﻿let filtersVisible = false;
-let selectedStartDate = null;
-let selectedEndDate = null;
+﻿/* ============================================================
+   GLOBAL STATE
+============================================================ */
+
+let filtersVisible = false;
+let analyticsRendered = false;
+
+/* ============================================================
+   INITIALIZATION
+============================================================ */
 
 document.addEventListener("DOMContentLoaded", () => {
     initFilterPanel();
     initDropdowns();
-    initCalendar();
     initSearch();
     initRowClicks();
     initAnalyticsToggle();
+    initCreateRequestModal();
+    initCreateRequestSubmit();
     bindFilterOrgBranch();
     bindCreateOrgBranch();
-    initCreateRequestSubmit();
-    initModal();
+
+    // Устанавливаем фильтры по умолчанию
+    setTimeout(() => {
+        clearFilters();
+    }, 100);
 });
 
-/* --------------------- ФИЛЬТР-ПАНЕЛЬ --------------------- */
+/* ============================================================
+   FILTER PANEL TOGGLE
+============================================================ */
 
 function initFilterPanel() {
     const btn = document.getElementById("toggleFiltersBtn");
@@ -35,43 +48,77 @@ function initFilterPanel() {
     clearBtn?.addEventListener("click", clearFilters);
 }
 
-/* --------------------- DROPDOWNS --------------------- */
+/* ============================================================
+   DROPDOWNS
+============================================================ */
 
 function initDropdowns() {
-    document.querySelectorAll(".dropdown-toggle").forEach(btn => {
-        btn.addEventListener("click", e => {
+    document.querySelectorAll(".dropdown-toggle").forEach(toggle => {
+        toggle.addEventListener("click", e => {
             e.stopPropagation();
-            const menu = btn.nextElementSibling;
+            const menu = toggle.nextElementSibling;
+
             closeAllDropdowns(menu);
             menu.classList.toggle("hidden");
         });
     });
 
-    document.addEventListener("click", () =>
-        closeAllDropdowns(null)
-    );
+    document.addEventListener("click", (e) => {
+        if (!e.target.closest('.dropdown')) {
+            closeAllDropdowns(null);
+        }
+    });
 
-    document.querySelectorAll(".dropdown-menu input[type=checkbox]").forEach(cb => {
-        cb.addEventListener("change", e => {
-            updateDropdownLabel(e.target.closest(".dropdown-menu"));
+    document.querySelectorAll(".dropdown-menu").forEach(menu => {
+        const all = menu.querySelector("input[value='all']");
+        const items = menu.querySelectorAll("input:not([value='all'])");
+
+        if (all) {
+            all.addEventListener("change", (e) => {
+                e.stopPropagation();
+                if (all.checked) {
+                    items.forEach(c => (c.checked = false));
+                }
+                updateDropdownLabel(menu);
+            });
+        }
+
+        items.forEach(cb => {
+            cb.addEventListener("change", (e) => {
+                e.stopPropagation();
+                if (cb.checked && all) all.checked = false;
+
+                if (![...items].some(x => x.checked) && all) {
+                    all.checked = true;
+                }
+
+                updateDropdownLabel(menu);
+            });
         });
     });
 }
 
 function closeAllDropdowns(except) {
-    document.querySelectorAll(".dropdown-menu").forEach(m => {
-        if (m !== except) m.classList.add("hidden");
+    document.querySelectorAll(".dropdown-menu").forEach(menu => {
+        if (menu !== except) menu.classList.add("hidden");
     });
 }
 
 function updateDropdownLabel(menu) {
     const toggle = menu.previousElementSibling;
     const all = menu.querySelector("input[value='all']");
-    const others = [...menu.querySelectorAll("input:not([value='all'])")];
-    const checked = [...menu.querySelectorAll("input:checked:not([value='all'])")];
+    const checked = [...menu.querySelectorAll("input:not([value='all']):checked")];
+
+    toggle.classList.remove("active");
 
     if (all && all.checked) {
-        toggle.textContent = "Все";
+        toggle.textContent =
+            toggle.id.includes("org") ? "Все организации" :
+                toggle.id.includes("branch") ? "Все филиалы" :
+                    toggle.id.includes("product") ? "Все продукты" :
+                        toggle.id.includes("client") ? "Все клиенты" :
+                            toggle.id.includes("status") ? "Все статусы" :
+                                "Все";
         return;
     }
 
@@ -81,21 +128,47 @@ function updateDropdownLabel(menu) {
     }
 
     toggle.textContent = `Выбрано (${checked.length})`;
+    toggle.classList.add("active");
 }
 
-/* --------------------- МОДАЛКА --------------------- */
+/* ============================================================
+   SEARCH
+============================================================ */
 
-function initModal() {
+function initSearch() {
+    const input = document.getElementById("searchInput");
+    if (!input) return;
+
+    input.addEventListener("input", () => {
+        const v = input.value.toLowerCase();
+
+        document.querySelectorAll("#requestsTable tbody tr").forEach(row => {
+            const title = row.children[1]?.textContent.toLowerCase();
+            row.style.display = title.includes(v) ? "" : "none";
+        });
+
+        updateStatsByFilters();
+    });
+}
+
+/* ============================================================
+   CREATE REQUEST MODAL
+============================================================ */
+
+function initCreateRequestModal() {
     const modal = document.getElementById("createModal");
+    if (!modal) return;
+
     const open = document.getElementById("btnCreateRequest");
     const close = document.getElementById("closeModalBtn");
     const cancel = document.getElementById("cancelModalBtn");
 
-    if (!modal) return;
-
     const closeModal = () => {
         modal.classList.add("hidden");
         document.body.style.overflow = "";
+        // Сбрасываем форму
+        const form = document.getElementById("createRequestForm");
+        if (form) form.reset();
     };
 
     open?.addEventListener("click", () => {
@@ -107,78 +180,15 @@ function initModal() {
     cancel?.addEventListener("click", closeModal);
 
     window.addEventListener("click", e => {
-        if (e.target.classList.contains("modal-overlay")) closeModal();
+        if (e.target.classList.contains("modal-overlay")) {
+            closeModal();
+        }
     });
 }
 
-/* --------------------- ПОИСК --------------------- */
-
-function initSearch() {
-    const input = document.getElementById("searchInput");
-    if (!input) return;
-
-    input.addEventListener("input", () => {
-        const v = input.value.toLowerCase();
-        document.querySelectorAll("#requestsTable tbody tr").forEach(row => {
-            const text = row.children[0].textContent.toLowerCase();
-            row.style.display = text.includes(v) ? "" : "none";
-        });
-    });
-}
-
-/* --------------------- ЗАВИСИМОСТЬ ОРГ → ФИЛИАЛЫ (МОДАЛКА) --------------------- */
-
-function bindCreateOrgBranch() {
-    const org = document.getElementById("reqOrganization");
-    const branch = document.getElementById("reqBranch");
-    const createdBy = document.getElementById("reqCreatedBy");
-
-    if (!org || !branch) return;
-
-    const clearBranches = () => {
-        branch.innerHTML = `<option value="">Выберите филиал (необязательно)</option>`;
-    };
-
-    const clearUsers = () => {
-        if (!createdBy) return;
-        createdBy.innerHTML = `<option value="">Выберите пользователя</option>`;
-    };
-
-    const loadBranches = async (orgId) => {
-        clearBranches();
-        const r = await fetch(`/Requests?handler=BranchesByOrgs&orgIds=${orgId}`);
-        const data = await r.json();
-        data.forEach(b => {
-            branch.innerHTML += `<option value="${b.id}">${b.address}</option>`;
-        });
-    };
-
-    const loadUsers = async () => {
-        if (!createdBy || !org.value) return;
-
-        clearUsers();
-
-        const url = `/Requests?handler=UsersByOrgBranch&orgId=${org.value}&branchId=${branch.value || ""}`;
-        const r = await fetch(url);
-        const data = await r.json();
-
-        data.forEach(u => {
-            createdBy.innerHTML += `<option value="${u.id}">${u.fullName}</option>`;
-        });
-    };
-
-    org.addEventListener("change", async () => {
-        clearBranches();
-        clearUsers();
-        if (!org.value) return;
-        await loadBranches(org.value);
-        await loadUsers();
-    });
-
-    branch.addEventListener("change", loadUsers);
-}
-
-/* --------------------- CREATE REQUEST --------------------- */
+/* ============================================================
+   CREATE REQUEST SUBMIT
+============================================================ */
 
 function initCreateRequestSubmit() {
     const form = document.getElementById("createRequestForm");
@@ -187,34 +197,150 @@ function initCreateRequestSubmit() {
     form.addEventListener("submit", async e => {
         e.preventDefault();
 
-        const fd = new FormData();
-        const token = document.querySelector("#antiForgeryForm input");
-        if (token) fd.append("__RequestVerificationToken", token.value);
+        console.log('=== ОТПРАВКА ФОРМЫ СОЗДАНИЯ ЗАЯВКИ ===');
 
-        [
-            "Title", "Topic", "OrganizationId", "BranchId",
-            "ProductId", "Priority", "Description", "CreatedById"
-        ].forEach(f => {
-            const el = document.getElementById("req" + f);
-            fd.append(f, el ? el.value : "");
-        });
+        // Собираем данные
+        const formData = {
+            title: document.getElementById("reqTitle").value.trim(),
+            topic: document.getElementById("reqTopic").value,
+            org: document.getElementById("reqOrganization").value,
+            branch: document.getElementById("reqBranch").value,
+            product: document.getElementById("reqProduct").value,
+            priority: document.getElementById("reqPriority").value,
+            createdBy: document.getElementById("reqCreatedBy")?.value,
+            description: document.getElementById("reqDescription").value.trim()
+        };
 
-        const file = document.getElementById("reqFile");
-        if (file?.files.length > 0) fd.append("File", file.files[0]);
+        console.log('Данные формы:', formData);
 
-        const res = await fetch("/Requests?handler=Create", { method: "POST", body: fd });
-
-        if (!res.ok) {
-            showToast("Ошибка создания заявки");
+        // Проверка обязательных полей
+        if (!formData.title) {
+            showToast("Введите заголовок заявки");
+            document.getElementById("reqTitle").focus();
             return;
         }
 
-        showToast("Заявка успешно создана!");
-        setTimeout(() => location.reload(), 700);
+        if (!formData.topic) {
+            showToast("Выберите тему");
+            document.getElementById("reqTopic").focus();
+            return;
+        }
+
+        if (!formData.org) {
+            showToast("Выберите организациию");
+            document.getElementById("reqOrganization").focus();
+            return;
+        }
+
+        if (!formData.product) {
+            showToast("Выберите продукт");
+            document.getElementById("reqProduct").focus();
+            return;
+        }
+
+        if (!formData.priority) {
+            showToast("Выберите приоритет");
+            document.getElementById("reqPriority").focus();
+            return;
+        }
+
+        const createdBySelect = document.getElementById("reqCreatedBy");
+        let createdById;
+        if (createdBySelect) {
+            if (!formData.createdBy) {
+                showToast("Выберите пользователя");
+                createdBySelect.focus();
+                return;
+            }
+            createdById = formData.createdBy;
+        } else {
+            createdById = window.currentUserId || formData.createdBy;
+        }
+
+        console.log('Все проверки пройдены. Создаем FormData...');
+
+        const fd = new FormData();
+
+        const token = document.querySelector("#antiForgeryForm input[name='__RequestVerificationToken']");
+        if (token) {
+            fd.append("__RequestVerificationToken", token.value);
+            console.log('Токен добавлен');
+        }
+
+        fd.append("Title", formData.title);
+        fd.append("Topic", formData.topic);
+        fd.append("OrganizationId", formData.org);
+        fd.append("BranchId", formData.branch || "");
+        fd.append("ProductId", formData.product);
+        fd.append("Priority", formData.priority);
+        fd.append("CreatedById", createdById);
+        fd.append("Description", formData.description);
+
+        console.log('Добавлены поля формы');
+
+        const file = document.getElementById("reqFile");
+        if (file?.files[0]) {
+            fd.append("File", file.files[0]);
+            console.log('Добавлен файл:', file.files[0].name);
+        }
+
+        try {
+            console.log('Отправка запроса на сервер...');
+
+            const url = "?handler=Create";
+            console.log('URL запроса:', url);
+
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.textContent = "Создание...";
+            submitBtn.disabled = true;
+
+            const res = await fetch(url, {
+                method: "POST",
+                body: fd
+            });
+
+            console.log('Статус ответа:', res.status, res.statusText);
+
+            submitBtn.textContent = originalText;
+            submitBtn.disabled = false;
+
+            const result = await res.json();
+            console.log('Ответ сервера:', result);
+
+            if (result.success) {
+                showToast("✅ Заявка создана успешно!");
+
+                const modal = document.getElementById("createModal");
+                if (modal) {
+                    modal.classList.add("hidden");
+                    document.body.style.overflow = "";
+                    form.reset();
+                }
+
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                const errorMsg = result.error || result.details || "Неизвестная ошибка";
+                console.error('Ошибка от сервера:', errorMsg);
+                showToast("❌ Ошибка: " + errorMsg);
+            }
+        } catch (error) {
+            console.error('Ошибка при отправке формы:', error);
+
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.textContent = "Сохранить";
+                submitBtn.disabled = false;
+            }
+
+            showToast("❌ Ошибка соединения: " + error.message);
+        }
     });
 }
 
-/* --------------------- ФИЛЬТРЫ: ОРГАНИЗАЦИИ → ФИЛИАЛЫ --------------------- */
+/* ============================================================
+   FILTER → ORG → BRANCH
+============================================================ */
 
 function bindFilterOrgBranch() {
     const orgCheckboxes = document.querySelectorAll(".filter-org");
@@ -228,279 +354,491 @@ function bindFilterOrgBranch() {
                 .filter(x => x.checked && x.value !== "all")
                 .map(x => x.value);
 
-            const orgsForQuery = ids.length === 0 ? "all" : ids.join(",");
-            const r = await fetch(`/Requests?handler=BranchesByOrgs&orgIds=${orgsForQuery}`);
-            const data = await r.json();
+            if (ids.length === 0) {
+                const allBranches = window.allBranches || [];
+                updateBranchFilterMenu(allBranches);
+                return;
+            }
 
-            branchMenu.innerHTML = "";
-
-            branchMenu.innerHTML += `<label><input type="checkbox" value="all" checked /> Все</label>`;
-
-            data.forEach(b => {
-                branchMenu.innerHTML +=
-                    `<label><input type="checkbox" class="filter-branch" value="${b.id}" /> ${b.address}</label>`;
-            });
+            const firstOrgId = ids[0];
+            try {
+                const allBranches = window.allBranches || [];
+                const filteredBranches = allBranches.filter(b => b.organizationId == firstOrgId);
+                updateBranchFilterMenu(filteredBranches);
+            } catch (error) {
+                console.error('Ошибка загрузки филиалов:', error);
+            }
         });
     });
 }
 
-/* --------------------- КАЛЕНДАРЬ --------------------- */
+function updateBranchFilterMenu(branches) {
+    const branchMenu = document.getElementById("branchFilterMenu");
+    if (!branchMenu) return;
 
-function initCalendar() {
-    const c = document.getElementById("calendarContainer");
-    if (!c) return;
+    branchMenu.innerHTML = `
+        <label><input type="checkbox" value="all" checked /> Все</label>
+    `;
 
-    const now = new Date();
-    let month = now.getMonth();
-    let year = now.getFullYear();
-
-    const render = () => {
-        c.innerHTML = "";
-        const header = document.createElement("div");
-        header.className = "calendar-header";
-
-        const prev = document.createElement("button");
-        prev.className = "btn small secondary";
-        prev.textContent = "‹";
-        prev.onclick = () => {
-            month = month === 0 ? 11 : month - 1;
-            if (month === 11) year--;
-            render();
-        };
-
-        const next = document.createElement("button");
-        next.className = "btn small secondary";
-        next.textContent = "›";
-        next.onclick = () => {
-            month = month === 11 ? 0 : month + 1;
-            if (month === 0) year++;
-            render();
-        };
-
-        const title = document.createElement("div");
-        title.textContent =
-            `${["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-                "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"][month]} ${year}`;
-
-        header.append(prev, title, next);
-        c.append(header);
-
-        const grid = document.createElement("div");
-        grid.className = "calendar-grid";
-
-        const first = new Date(year, month, 1).getDay() || 7;
-        const total = new Date(year, month + 1, 0).getDate();
-
-        for (let i = 1; i < first; i++)
-            grid.append(createCalendarCell("", "empty"));
-
-        for (let d = 1; d <= total; d++) {
-            const cell = createCalendarCell(d);
-            const dateObj = new Date(year, month, d);
-
-            if (isSameDay(dateObj, new Date())) cell.classList.add("today");
-            if (isSameDay(dateObj, selectedStartDate)) cell.classList.add("selected");
-            if (isSameDay(dateObj, selectedEndDate)) cell.classList.add("selected");
-
-            cell.onclick = () => selectDate(dateObj);
-            grid.append(cell);
-        }
-
-        c.append(grid);
-    };
-
-    const createCalendarCell = (text, cls) => {
-        const div = document.createElement("div");
-        div.className = "calendar-cell " + (cls || "");
-        div.textContent = text;
-        return div;
-    };
-
-    const selectDate = d => {
-        if (!selectedStartDate || selectedEndDate) {
-            selectedStartDate = d;
-            selectedEndDate = null;
-        } else if (d < selectedStartDate) {
-            selectedEndDate = selectedStartDate;
-            selectedStartDate = d;
-        } else {
-            selectedEndDate = d;
-        }
-        render();
-    };
-
-    const isSameDay = (a, b) =>
-        b && a.getDate() === b.getDate() &&
-        a.getMonth() === b.getMonth() &&
-        a.getFullYear() === b.getFullYear();
-
-    render();
+    branches.forEach(b => {
+        branchMenu.innerHTML += `
+            <label>
+                <input type="checkbox" class="filter-branch" value="${b.id}"/>
+                ${b.address}
+            </label>`;
+    });
 }
 
-/* --------------------- ПРИМЕНЕНИЕ ФИЛЬТРОВ --------------------- */
+/* ============================================================
+   CREATE MODAL ORG → BRANCH → USER
+============================================================ */
+
+function bindCreateOrgBranch() {
+    const org = document.getElementById("reqOrganization");
+    const branch = document.getElementById("reqBranch");
+    const createdBy = document.getElementById("reqCreatedBy");
+
+    if (!org) return;
+
+    // Функция для загрузки филиалов
+    async function loadBranches(orgId) {
+        if (!branch) return;
+
+        console.log('Загрузка филиалов для организации:', orgId);
+        const currentBranchId = branch.value;
+        branch.innerHTML = `<option value="">Выберите филиал</option>`;
+
+        try {
+            const url = `?handler=ApiBranches&orgId=${orgId}`;
+            const r = await fetch(url);
+
+            if (!r.ok) {
+                const allBranches = window.allBranches || [];
+                const filteredBranches = allBranches.filter(b => b.organizationId == orgId);
+                populateBranchDropdown(filteredBranches, currentBranchId);
+                return;
+            }
+
+            const result = await r.json();
+            if (result.success && result.data && result.data.length > 0) {
+                populateBranchDropdown(result.data, currentBranchId);
+            } else {
+                branch.innerHTML += `<option value="" disabled>Нет филиалов</option>`;
+            }
+        } catch (error) {
+            const allBranches = window.allBranches || [];
+            const filteredBranches = allBranches.filter(b => b.organizationId == orgId);
+            populateBranchDropdown(filteredBranches, currentBranchId);
+        }
+    }
+
+    function populateBranchDropdown(branches, currentBranchId) {
+        branch.innerHTML = `<option value="">Выберите филиал</option>`;
+
+        if (branches && branches.length > 0) {
+            branches.forEach(b => {
+                const option = new Option(b.address, b.id);
+                if (b.id == currentBranchId) option.selected = true;
+                branch.add(option);
+            });
+        }
+    }
+
+    // Функция для загрузки пользователей
+    async function loadUsers(orgId, branchId = null) {
+        if (!createdBy) return;
+
+        console.log('Загрузка пользователей для организации:', orgId, 'филиал:', branchId);
+        const currentUserId = createdBy.value;
+        createdBy.innerHTML = `<option value="">Выберите пользователя</option>`;
+
+        try {
+            let url = `?handler=ApiUsers&orgId=${orgId}`;
+            if (branchId) url += `&branchId=${branchId}`;
+
+            const r = await fetch(url);
+
+            if (!r.ok) {
+                const allUsers = window.allUsers || [];
+                const filteredUsers = allUsers.filter(u =>
+                    u.organizations && u.organizations.includes(parseInt(orgId))
+                );
+                populateUserDropdown(filteredUsers, currentUserId);
+                return;
+            }
+
+            const result = await r.json();
+            if (result.success && result.data && result.data.length > 0) {
+                populateUserDropdown(result.data, currentUserId);
+            }
+        } catch (error) {
+            const allUsers = window.allUsers || [];
+            const filteredUsers = allUsers.filter(u =>
+                u.organizations && u.organizations.includes(parseInt(orgId))
+            );
+            populateUserDropdown(filteredUsers, currentUserId);
+        }
+    }
+
+    function populateUserDropdown(users, currentUserId) {
+        createdBy.innerHTML = `<option value="">Выберите пользователя</option>`;
+
+        if (users && users.length > 0) {
+            users.forEach(u => {
+                const option = new Option(u.fullName, u.id);
+                if (u.id == currentUserId) option.selected = true;
+                createdBy.add(option);
+            });
+        }
+    }
+
+    // Загружаем данные при изменении организации
+    org.addEventListener("change", async () => {
+        console.log('Изменена организация:', org.value);
+
+        if (!org.value) {
+            if (branch) branch.innerHTML = `<option value="">Выберите филиал</option>`;
+            if (createdBy) createdBy.innerHTML = `<option value="">Выберите пользователя</option>`;
+            return;
+        }
+
+        await loadBranches(org.value);
+        const branchId = branch?.value || null;
+        await loadUsers(org.value, branchId);
+    });
+
+    // Загружаем пользователей при изменении филиала
+    branch?.addEventListener("change", async () => {
+        console.log('Изменен филиал:', branch?.value);
+
+        if (!org.value) {
+            showToast("Сначала выберите организацию");
+            return;
+        }
+
+        const branchId = branch.value || null;
+        await loadUsers(org.value, branchId);
+    });
+
+    // Инициализация при открытии модалки
+    const modalOpenBtn = document.getElementById("btnCreateRequest");
+    if (modalOpenBtn) {
+        modalOpenBtn.addEventListener("click", () => {
+            setTimeout(() => {
+                if (org.value) {
+                    loadBranches(org.value);
+                    loadUsers(org.value, branch?.value || null);
+                }
+            }, 100);
+        });
+    }
+}
+
+/* ============================================================
+   APPLY FILTERS
+============================================================ */
 
 function applyFilters() {
     const f = collectFilters();
+    const orgNames = {};
 
-    document.querySelectorAll("#requestsTable tbody tr").forEach(row => {
-        const cols = row.children;
-
-        const vOrg = cols[2].textContent.toLowerCase();
-        const vBranch = cols[3].textContent.toLowerCase();
-        const vProd = cols[4].textContent.toLowerCase();
-        const vPri = cols[5].textContent.toLowerCase();
-        const vStatus = cols[6].textContent.toLowerCase();
-        const vClient = row.querySelector("td:nth-last-child(2)")?.textContent.toLowerCase() || "";
-        const vDate = cols[cols.length - 1].textContent;
-
-        let visible = true;
-
-        if (!f.orgs.includes("all") && f.orgs.length)
-            visible = visible && f.orgs.some(x => vOrg.includes(x.toLowerCase()));
-
-        if (!f.branches.includes("all") && f.branches.length)
-            visible = visible && f.branches.some(x => vBranch.includes(x.toLowerCase()));
-
-        if (!f.products.includes("all") && f.products.length)
-            visible = visible && f.products.some(x => vProd.includes(x.toLowerCase()));
-
-        if (!f.statuses.includes("all") && f.statuses.length)
-            visible = visible && f.statuses.some(x => vStatus.includes(x.toLowerCase()));
-
-        if (!f.clients.includes("all") && f.clients.length)
-            visible = visible && f.clients.some(x => vClient.includes(x.toLowerCase()));
-
-        if (f.startDate || f.endDate) {
-            const [dd, mm, yy] = vDate.split(".");
-            const dt = new Date(`${yy}-${mm}-${dd}`);
-
-            if (f.startDate && dt < new Date(f.startDate)) visible = false;
-            if (f.endDate && dt > new Date(f.endDate)) visible = false;
-        }
-
-        row.style.display = visible ? "" : "none";
+    document.querySelectorAll("#orgFilterMenu .filter-org:checked").forEach(cb => {
+        const orgId = cb.value;
+        const orgName = cb.nextSibling?.textContent?.trim();
+        if (orgName) orgNames[orgId] = orgName;
     });
 
+    // Собираем данные из таблицы
+    const tableData = [];
+    document.querySelectorAll("#requestsTable tbody tr").forEach(row => {
+        const cells = row.children;
+        tableData.push({
+            row: row,
+            orgName: cells[3]?.textContent.trim() || '',
+            branch: cells[4]?.textContent.trim() || '',
+            product: cells[5]?.textContent.trim() || '',
+            status: cells[7]?.textContent.trim() || '',
+            date: cells[cells.length - 1]?.textContent.trim() || ''
+        });
+    });
+
+    // Применяем фильтры
+    tableData.forEach(item => {
+        let visible = true;
+
+        // Фильтр по организации
+        if (f.orgs.length > 0 && !f.orgs.includes('all')) {
+            const orgMatch = f.orgs.some(orgId => {
+                const orgNameFromTable = item.orgName;
+                const orgNameFromFilter = orgNames[orgId];
+                return orgNameFromTable === orgNameFromFilter;
+            });
+            if (!orgMatch) visible = false;
+        }
+
+        // Фильтр по филиалу
+        if (f.branches.length > 0 && !f.branches.includes('all')) {
+            const branchMatch = f.branches.some(branchId => {
+                const branchCheckbox = document.querySelector(`.filter-branch[value="${branchId}"]:checked`);
+                const branchName = branchCheckbox?.nextSibling?.textContent?.trim();
+                return branchName && item.branch.includes(branchName);
+            });
+            if (!branchMatch) visible = false;
+        }
+
+        // Фильтр по продукту
+        if (f.products.length > 0 && !f.products.includes('all')) {
+            const productMatch = f.products.some(productId => {
+                const productCheckbox = document.querySelector(`.filter-product[value="${productId}"]:checked`);
+                const productName = productCheckbox?.nextSibling?.textContent?.trim();
+                return productName && item.product.includes(productName);
+            });
+            if (!productMatch) visible = false;
+        }
+
+        // Фильтр по статусу
+        if (f.statuses.length > 0 && !f.statuses.includes('all')) {
+            const statusMatch = f.statuses.some(status => {
+                return item.status.toLowerCase().includes(status.toLowerCase());
+            });
+            if (!statusMatch) visible = false;
+        }
+
+        // Фильтр по дате
+        if (item.date) {
+            const [dd, mm, yy] = item.date.split(".");
+            const dt = new Date(`${yy}-${mm}-${dd}`);
+
+            if (f.startDate) {
+                const start = new Date(f.startDate);
+                start.setHours(0, 0, 0, 0);
+                if (dt < start) visible = false;
+            }
+
+            if (f.endDate) {
+                const end = new Date(f.endDate);
+                end.setHours(23, 59, 59, 999);
+                if (dt > end) visible = false;
+            }
+        }
+
+        item.row.style.display = visible ? "" : "none";
+    });
+
+    updateStatsByFilters();
     showToast("Фильтры применены");
 }
 
 function clearFilters() {
-    document.querySelectorAll(".dropdown-menu input[type=checkbox]").forEach(cb => cb.checked = true);
-    document.querySelectorAll(".dropdown-toggle").forEach(t => t.textContent = "Все");
-    selectedStartDate = null;
-    selectedEndDate = null;
+    document.querySelectorAll(".dropdown-menu input[type=checkbox]").forEach(cb => {
+        if (cb.classList.contains('filter-status')) {
+            cb.checked = (cb.value === 'Создана' || cb.value === 'В работе');
+        } else if (cb.value === 'all') {
+            cb.checked = true;
+        } else {
+            cb.checked = false;
+        }
+    });
+
+    document.querySelectorAll(".dropdown-toggle").forEach(t => {
+        if (t.id.includes("org")) t.textContent = "Все организации";
+        else if (t.id.includes("branch")) t.textContent = "Все филиалы";
+        else if (t.id.includes("product")) t.textContent = "Все продукты";
+        else if (t.id.includes("client")) t.textContent = "Все клиенты";
+        else if (t.id.includes("status")) t.textContent = "Создана, В работе";
+        else t.textContent = "Все";
+    });
+
+    const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    document.getElementById("dateFrom").value = startOfYear.toISOString().split("T")[0];
+    document.getElementById("dateTo").value = now.toISOString().split("T")[0];
+
+    applyFilters();
     showToast("Фильтры сброшены");
 }
 
 function collectFilters() {
     return {
-        orgs: getChecked(".filter-org"),
-        branches: getChecked(".filter-branch"),
-        products: getChecked(".filter-product"),
-        statuses: getChecked(".filter-status"),
-        priorities: getChecked(".filter-priority"),
-        clients: getChecked(".filter-client"),
-        startDate: selectedStartDate ? selectedStartDate.toISOString().split("T")[0] : null,
-        endDate: selectedEndDate ? selectedEndDate.toISOString().split("T")[0] : null
+        orgs: checked(".filter-org"),
+        branches: checked(".filter-branch"),
+        products: checked(".filter-product"),
+        statuses: checked(".filter-status"),
+        startDate: document.getElementById("dateFrom").value,
+        endDate: document.getElementById("dateTo").value
     };
 }
 
-function getChecked(selector) {
-    return [...document.querySelectorAll(selector + ":checked")].map(cb => cb.value);
+function checked(selector) {
+    return [...document.querySelectorAll(selector + ":checked")].map(c => c.value);
 }
 
-/* --------------------- РЯДЫ ТАБЛИЦЫ --------------------- */
+/* ============================================================
+   STATS UPDATE AFTER FILTERS
+============================================================ */
+
+function updateStatsByFilters() {
+    const rows = [...document.querySelectorAll("#requestsTable tbody tr")].filter(
+        r => r.style.display !== "none"
+    );
+
+    const total = document.getElementById("statTotal");
+    const created = document.getElementById("statCreated");
+    const inWork = document.getElementById("statInWork");
+    const done = document.getElementById("statDone");
+    const cancelled = document.getElementById("statCancelled");
+
+    if (total) total.textContent = rows.length;
+    if (created) created.textContent = rows.filter(r =>
+        r.children[7].textContent.includes("Создана")
+    ).length;
+    if (inWork) inWork.textContent = rows.filter(r =>
+        r.children[7].textContent.includes("В работе")
+    ).length;
+    if (done) done.textContent = rows.filter(r =>
+        r.children[7].textContent.includes("Завершена")
+    ).length;
+    if (cancelled) cancelled.textContent = rows.filter(r =>
+        r.children[7].textContent.includes("Отменена")
+    ).length;
+}
+
+/* ============================================================
+   ROW DOUBLE CLICK
+============================================================ */
 
 function initRowClicks() {
-    document.querySelectorAll("#requestsTable tbody tr").forEach(r => {
-        r.addEventListener("dblclick", () => {
-            window.location.href = `/Requests/Details/${r.dataset.requestId}`;
+    document.querySelectorAll("#requestsTable tbody tr").forEach(row => {
+        row.addEventListener("dblclick", () => {
+            const id = row.dataset.requestId;
+            if (id) window.location.href = `/Requests/Details/${id}`;
         });
     });
 }
 
-/* --------------------- ТОСТЫ --------------------- */
-
-function showToast(msg) {
-    const div = document.createElement("div");
-    div.className = "toast";
-    div.textContent = msg;
-    document.body.append(div);
-    setTimeout(() => div.classList.add("fade-out"), 2000);
-    setTimeout(() => div.remove(), 2500);
-}
-
-/* --------------------- АНАЛИТИКА --------------------- */
+/* ============================================================
+   ANALYTICS
+============================================================ */
 
 function initAnalyticsToggle() {
     const btn = document.getElementById("toggleAnalyticsBtn");
     const sec = document.getElementById("analyticsSection");
-    if (!btn || !sec) return;
 
-    let rendered = false;
+    if (!btn || !sec) return;
 
     btn.addEventListener("click", () => {
         const collapsed = sec.classList.toggle("collapsed");
         btn.textContent = collapsed ? "Показать аналитику" : "Скрыть аналитику";
 
-        if (!collapsed && !rendered) {
+        if (!collapsed && !analyticsRendered) {
             renderAnalyticsCharts();
-            rendered = true;
+            analyticsRendered = true;
         }
     });
 }
 
 function renderAnalyticsCharts() {
-    const rows = document.querySelectorAll("#requestsTable tbody tr");
-    if (!rows.length) return;
+    const rows = [...document.querySelectorAll("#requestsTable tbody tr")];
 
-    const statusData = {};
-    const dateData = {};
+    const statuses = {
+        Создана: 0,
+        "В работе": 0,
+        Завершена: 0,
+        Отменена: 0
+    };
+
+    const dates = {};
 
     rows.forEach(r => {
-        const cols = r.children;
-        const status = cols[6].textContent.trim();
-        const date = cols[cols.length - 1].textContent.trim();
-
-        statusData[status] = (statusData[status] || 0) + 1;
-
-        const key = date.split(".").reverse().join("-");
-        dateData[key] = (dateData[key] || 0) + 1;
+        const s = r.children[7].textContent.trim();
+        statuses[s]++;
+        const d = r.children[r.children.length - 1].textContent.trim();
+        dates[d] = (dates[d] || 0) + 1;
     });
 
-    const ctxStatus = document.getElementById("chartStatus");
-    const ctxDates = document.getElementById("chartDates");
+    // Круговая диаграмма статусов
+    const statusChartCtx = document.getElementById("chartStatus");
+    if (statusChartCtx) {
+        new Chart(statusChartCtx, {
+            type: "doughnut",
+            data: {
+                labels: Object.keys(statuses),
+                datasets: [{
+                    data: Object.values(statuses),
+                    backgroundColor: ['#60a5fa', '#facc15', '#22c55e', '#ef4444']
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+    }
 
-    const statuses = Object.keys(statusData);
-    const statusValues = Object.values(statusData);
-
-    new Chart(ctxStatus, {
-        type: "doughnut",
-        data: {
-            labels: statuses,
-            datasets: [{
-                data: statusValues,
-                backgroundColor: ["#60a5fa", "#facc15", "#22c55e", "#ef4444"]
-            }]
-        },
-        options: { cutout: "70%" }
-    });
-
-    const sortedDates = Object.keys(dateData).sort();
-    const dateValues = sortedDates.map(d => dateData[d]);
-
-    new Chart(ctxDates, {
-        type: "line",
-        data: {
-            labels: sortedDates.map(d => d.split("-").reverse().join(".")),
-            datasets: [{
-                label: "Количество заявок",
-                data: dateValues,
-                borderColor: "#3b82f6",
-                tension: 0.3,
-                fill: true
-            }]
-        },
-        options: { responsive: true }
-    });
+    // Гистограмма по датам
+    const datesChartCtx = document.getElementById("chartDates");
+    if (datesChartCtx) {
+        new Chart(datesChartCtx, {
+            type: "bar",
+            data: {
+                labels: Object.keys(dates),
+                datasets: [{
+                    label: "Количество заявок",
+                    data: Object.values(dates),
+                    backgroundColor: '#3b82f6'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                }
+            }
+        });
+    }
 }
+
+/* ============================================================
+   TOAST
+============================================================ */
+
+function showToast(msg) {
+    document.querySelectorAll('.toast').forEach(t => t.remove());
+
+    const div = document.createElement("div");
+    div.className = "toast";
+    div.textContent = msg;
+    document.body.append(div);
+
+    setTimeout(() => {
+        div.style.opacity = "1";
+        div.style.transform = "translateY(0)";
+    }, 10);
+
+    setTimeout(() => {
+        div.style.opacity = "0";
+        div.style.transform = "translateY(20px)";
+        setTimeout(() => div.remove(), 300);
+    }, 3000);
+}
+
+// Добавляем стили для анимации тоста
+const toastStyles = document.createElement('style');
+toastStyles.textContent = `
+    .toast {
+        position: fixed;
+        bottom: 25px;
+        right: 25px;
+        background: #2563eb;
+        color: white;
+        padding: 12px 18px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        opacity: 0;
+        transform: translateY(20px);
+        transition: opacity 0.3s, transform 0.3s;
+        font-size: 14px;
+        z-index: 10000;
+        max-width: 300px;
+        word-wrap: break-word;
+    }
+`;
+document.head.appendChild(toastStyles);

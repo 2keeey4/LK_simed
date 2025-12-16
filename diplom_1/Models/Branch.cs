@@ -12,6 +12,5 @@
 
         public ICollection<UserBranch> UserBranches { get; set; } = new List<UserBranch>();
 
-        public ICollection<Request> Requests { get; set; } = new List<Request>();
     }
 }

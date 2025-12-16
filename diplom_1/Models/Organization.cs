@@ -14,5 +14,7 @@
 
         public ICollection<Branch> Branches { get; set; } = new List<Branch>();
         public ICollection<UserOrganization> UserOrganizations { get; set; } = new List<UserOrganization>();
+        public double WorkHoursLimit { get; set; } = 0; // лимит человеко-часов по договору
+
     }
 }

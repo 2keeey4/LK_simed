@@ -12,6 +12,44 @@
     margin-bottom: 18px;
 }
 
+/* 🔹 Стили для красивой кнопки с троеточием */
+.dots-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 24px;
+}
+
+.details-btn {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 4px 12px;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: bold;
+    color: #64748b;
+    line-height: 1;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 28px;
+}
+
+    .details-btn:hover {
+        background: #3b82f6;
+        border-color: #3b82f6;
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+    }
+
+    .details-btn:active {
+        transform: translateY(0);
+    }
+
 /* СТАТИСТИКА */
 .stats-row {
     display: flex;
@@ -300,14 +338,14 @@
     }
 
     .main-table tr:hover {
-        background: #edf4ff;
+        background: #f9fafb;
         transition: 0.2s;
         cursor: pointer;
     }
 
     /* 🔹 мягкая подсветка при фильтрации */
     .main-table tr.filtered {
-        background: #f0f9ff;
+        background: #fff;
         transition: background 0.3s;
     }
 
