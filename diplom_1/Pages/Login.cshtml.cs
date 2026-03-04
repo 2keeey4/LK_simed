@@ -73,7 +73,6 @@ namespace diplom_1.Pages
             HttpContext.Session.SetString("Email", user.Email ?? "");
 
 
-            // --- Фото ---ы
             var photoPath = string.IsNullOrEmpty(user.PhotoPath)
                 ? "/icons/default-avatar.png"
                 : user.PhotoPath;

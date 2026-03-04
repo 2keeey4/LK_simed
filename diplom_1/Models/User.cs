@@ -17,6 +17,7 @@ namespace diplom_1.Models
 
         public string FullName { get; set; } = string.Empty;
         public string? PhotoPath { get; set; }
+        public string? ResetToken { get; set; }
 
         public ICollection<UserOrganization> UserOrganizations { get; set; } = new List<UserOrganization>();
         public ICollection<UserBranch> UserBranches { get; set; } = new List<UserBranch>();

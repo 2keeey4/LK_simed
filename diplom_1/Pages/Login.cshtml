@@ -5,35 +5,71 @@
     ViewData["Title"] = "Вход в личный кабинет";
 }
 
-<link rel="stylesheet" href="~/css/login.css" />
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"]</title>
+    <link rel="stylesheet" href="~/css/login.css?v=@DateTime.Now.Ticks" />
+    <script>
+        function togglePassword(inputId, button) {
+            const input = document.getElementById(inputId);
+            const svg = button.querySelector('svg');
 
-<div class="auth-wrapper">
-    <div class="auth-card">
-        <h1 class="auth-title">Личный кабинет</h1>
-        <h2 class="auth-subtitle">Авторизация пользователя</h2>
+            if (!input || !svg) return;
 
-        <form method="post" class="auth-form">
-            <div class="form-group">
-                <input asp-for="Input.Login" class="form-input" placeholder="Логин" />
-                <span asp-validation-for="Input.Login" class="error-message"></span>
-            </div>
-
-            <div class="form-group">
-                <input asp-for="Input.Password" class="form-input" type="password" placeholder="Пароль" />
-                <span asp-validation-for="Input.Password" class="error-message"></span>
-            </div>
-
-            <button type="submit" class="btn-login">Войти</button>
-
-            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
-            {
-                <p class="error-message">@Model.ErrorMessage</p>
+            if (input.type === "password") {
+                input.type = "text";
+                svg.innerHTML = '<circle cx="12" cy="12" r="3"/><path d="M22 12c-2.667 4.667-6 7-10 7s-7.333-2.333-10-7c2.667-4.667 6-7 10-7s7.333 2.333 10 7z"/><line x1="1" y1="1" x2="23" y2="23"/>';
+            } else {
+                input.type = "password";
+                svg.innerHTML = '<circle cx="12" cy="12" r="3"/><path d="M22 12c-2.667 4.667-6 7-10 7s-7.333-2.333-10-7c2.667-4.667 6-7 10-7s7.333 2.333 10 7z"/>';
             }
+        }
+    </script>
+</head>
+<body>
+    <div class="auth-wrapper">
+        <div class="auth-card">
+            <h1 class="auth-title">Личный кабинет</h1>
+            <h2 class="auth-subtitle">Авторизация пользователя</h2>
 
-        </form>
+            <form method="post" class="auth-form">
+                <div class="form-group">
+                    <input asp-for="Input.Login" class="form-input" placeholder="Логин" />
+                    <span asp-validation-for="Input.Login" class="error-message"></span>
+                </div>
+
+                <div class="form-group">
+                    <input asp-for="Input.Password" class="form-input" type="password" placeholder="Пароль" id="login-password" />
+                    <button type="button" class="password-toggle" onclick="togglePassword('login-password', this)" tabindex="-1">
+                        <svg class="eye-icon" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="3" />
+                            <path d="M22 12c-2.667 4.667-6 7-10 7s-7.333-2.333-10-7c2.667-4.667 6-7 10-7s7.333 2.333 10 7z" />
+                        </svg>
+                    </button>
+                    <span asp-validation-for="Input.Password" class="error-message"></span>
+                </div>
+
+                <button type="submit" class="btn-login">Войти</button>
+
+                @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+                {
+                    <div class="message-container">
+                        <p class="error-message">@Model.ErrorMessage</p>
+                    </div>
+                }
+            </form>
+
+            <div class="link-text">
+                <a asp-page="/ForgotPassword">Забыли пароль?</a>
+            </div>
+        </div>
     </div>
-</div>
 
-@section Scripts {
-    <partial name="_ValidationScriptsPartial" />
-}
+    @section Scripts {
+        <partial name="_ValidationScriptsPartial" />
+    }
+</body>
+</html>

@@ -12,42 +12,55 @@
     margin-bottom: 18px;
 }
 
-/* 🔹 Стили для красивой кнопки с троеточием */
+/* 🔹 МИНИМАЛИСТИЧНАЯ КНОПКА ТРОЕТОЧИЯ */
 .dots-wrapper {
     display: flex;
     justify-content: center;
     align-items: center;
+    width: 24px;
     height: 24px;
 }
 
 .details-btn {
-    background: #f1f5f9;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    padding: 4px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 0;
     cursor: pointer;
     font-size: 18px;
-    font-weight: bold;
+    font-weight: 600;
     color: #64748b;
     line-height: 1;
     transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 32px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
+    min-width: auto;
 }
 
     .details-btn:hover {
         background: #3b82f6;
-        border-color: #3b82f6;
         color: white;
-        transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        transform: scale(1.1);
     }
 
     .details-btn:active {
-        transform: translateY(0);
+        transform: scale(1);
+    }
+
+/* 🔹 КОМПАКТНЫЕ СТРОКИ ТАБЛИЦЫ */
+.main-table td {
+    padding: 8px 10px;
+    vertical-align: middle;
+    height: 40px; /* фиксированная высота строки */
+}
+
+    /* 🔹 ВЫРАВНИВАНИЕ СОДЕРЖИМОГО ЯЧЕЙКИ СТАТУСА */
+    .main-table td:nth-child(8) {
+        padding-top: 9px;
+        padding-bottom: 9px;
     }
 
 /* СТАТИСТИКА */
@@ -215,11 +228,21 @@
         font-weight: 500;
     }
 
-/* 🔹 подсветка активных фильтров */
-.dropdown-toggle.active {
+/* 🔹 активные фильтры */
+.dropdown-toggle.has-filter {
     background: #e0f2fe;
     border-color: #38bdf8;
     color: #075985;
+}
+
+/* 🔹 СТИЛИ ДЛЯ НЕДОСТУПНЫХ ФИЛЬТРОВ */
+.dropdown-menu label:has(input:disabled) {
+    color: #94a3b8;
+    cursor: not-allowed;
+}
+
+.dropdown-menu input:disabled {
+    cursor: not-allowed;
 }
 
 /* ВЫПАДАЮЩИЕ МЕНЮ */
@@ -357,6 +380,8 @@
     font-weight: 600;
     text-transform: capitalize;
     display: inline-block;
+    white-space: nowrap;
+    vertical-align: middle;
 }
 
 .status-создана {
@@ -509,7 +534,6 @@
         display: block;
     }
 
-
 .chart-card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
@@ -542,7 +566,6 @@
         grid-template-columns: 1fr;
     }
 }
-
 
 /* МОДАЛКА */
 .modal {

@@ -4,85 +4,188 @@
 @{
     ViewData["Title"] = "Информация о заявке";
     Layout = "_DashboardLayout";
-
-    // Получаем текущего пользователя из сессии
     var currentUserId = HttpContext.Session.GetInt32("UserId");
 }
+
+
+
+<input type="hidden" id="requestId" value="@Model.Request.Id" />
+<input type="hidden" id="organizationId" value="@Model.Request.OrganizationId" />
+<input type="hidden" id="branchId" value="@Model.Request.BranchId" />
+<input type="hidden" id="canEdit" value="@Model.CanEdit.ToString().ToLower()" />
 
 <link rel="stylesheet" href="~/css/requestDetails.css" />
 <script defer src="~/js/requestDetails.js"></script>
 
 <div class="page-wrapper">
-
     <!-- Основная информация -->
     <section class="request-section">
         <h2>Информация о заявке</h2>
-
         <div class="request-card">
             <div class="info-row">
+                <!-- Заголовок -->
                 <div>
-                    <label>Заголовок</label>
-                    <p>@Model.Request.Title</p>
+                    <label class="label-with-icon">
+                        Заголовок
+                        @if (Model.CanEdit)
+                        {
+                            <button type="button" class="edit-btn" data-field="title" title="Редактировать">
+                                <img src="~/icons/edit.svg" alt="✎" width="14" height="14" />
+                            </button>
+                        }
+                    </label>
+                    <p id="titleDisplay">@Model.Request.Title</p>
                 </div>
 
+                <!-- Тема -->
                 <div>
                     <label class="label-with-icon">
                         Тема
-                        <button type="button" class="edit-btn" data-field="topic" title="Редактировать тему">
-                            <img src="~/icons/arrow-square-up.svg" alt="Редактировать" class="edit-icon" />
-                        </button>
+                        @if (Model.CanEdit)
+                        {
+                            <button type="button" class="edit-btn" data-field="topic" title="Редактировать">
+                                <img src="~/icons/edit.svg" alt="✎" width="14" height="14" />
+                            </button>
+                        }
                     </label>
                     <p id="topicDisplay">@Model.Request.Topic</p>
                 </div>
 
-
+                <!-- Продукт -->
                 <div>
-                    <label>Продукт</label>
-                    <p>@(Model.Request.Product?.Name ?? "-")</p>
+                    <label class="label-with-icon">
+                        Продукт
+                        @if (Model.CanEdit)
+                        {
+                            <button type="button" class="edit-btn" data-field="product" title="Редактировать">
+                                <img src="~/icons/edit.svg" alt="✎" width="14" height="14" />
+                            </button>
+                        }
+                    </label>
+                    <p id="productDisplay">@(Model.Request.Product?.Name ?? "-")</p>
                 </div>
 
+                <!-- Организация -->
                 <div>
-                    <label>Организация</label>
-                    <p>@(Model.Request.Organization?.Name ?? "-")</p>
+                    <label class="label-with-icon">
+                        Организация
+                        @if (Model.CanEdit)
+                        {
+                            <button type="button" class="edit-btn" data-field="organization" title="Редактировать">
+                                <img src="~/icons/edit.svg" alt="✎" width="14" height="14" />
+                            </button>
+                        }
+                    </label>
+                    <p id="organizationDisplay">@(Model.Request.Organization?.Name ?? "-")</p>
                 </div>
 
+                <!-- Филиал -->
                 <div>
-                    <label>Филиал</label>
-                    <p>@(Model.Request.Branch?.Address ?? "-")</p>
+                    <label class="label-with-icon">
+                        Филиал
+                        @if (Model.CanEdit)
+                        {
+                            <button type="button" class="edit-btn" data-field="branch" title="Редактировать">
+                                <img src="~/icons/edit.svg" alt="✎" width="14" height="14" />
+                            </button>
+                        }
+                    </label>
+                    <p id="branchDisplay">@(Model.Request.Branch?.Address ?? "-")</p>
                 </div>
 
+                <!-- Приоритет -->
                 <div>
-                    <label>Приоритет</label>
-                    <p class="priority">@Model.Request.Priority</p>
+                    <label class="label-with-icon">
+                        Приоритет
+                        @if (Model.CanEdit)
+                        {
+                            <button type="button" class="edit-btn" data-field="priority" title="Редактировать">
+                                <img src="~/icons/edit.svg" alt="✎" width="14" height="14" />
+                            </button>
+                        }
+                    </label>
+                    <p id="priorityDisplay" class="priority">@Model.Request.Priority</p>
                 </div>
 
+                <!-- Статус -->
                 <div>
                     <label class="label-with-icon">
                         Статус
-                        <button type="button" class="edit-btn" data-field="status" title="Редактировать статус">
-                            <img src="~/icons/arrow-square-up.svg" alt="Редактировать" class="edit-icon" />
-                        </button>
+                        @if (Model.CanEdit)
+                        {
+                            <button type="button" class="edit-btn" data-field="status" title="Редактировать">
+                                <img src="~/icons/edit.svg" alt="✎" width="14" height="14" />
+                            </button>
+                        }
                     </label>
-                    <p id="statusDisplay">@Model.Request.Status</p>
+                    <p id="statusDisplay" class="status">@Model.Request.Status</p>
                 </div>
 
-
-
+                <!-- Клиент -->
                 <div>
-                    <label>Дата</label>
+                    <label class="label-with-icon">
+                        Клиент
+                        @if (Model.CanEdit)
+                        {
+                            <button type="button" class="edit-btn" data-field="client" title="Редактировать">
+                                <img src="~/icons/edit.svg" alt="✎" width="14" height="14" />
+                            </button>
+                        }
+                    </label>
+                    <p id="clientDisplay">@(Model.Request.CreatedBy?.FullName ?? "-")</p>
+                </div>
+
+                <!-- Дата -->
+                <div>
+                    <label>Дата создания</label>
                     <p>@Model.Request.CreatedAt.ToString("dd.MM.yyyy HH:mm")</p>
                 </div>
             </div>
 
-
+            <!-- Описание -->
             <div class="desc">
-                <label>Описание</label>
-                <p>@(string.IsNullOrWhiteSpace(Model.Request.Description) ? "—" : Model.Request.Description)</p>
+                <label class="label-with-icon">
+                    Описание
+                    @if (Model.CanEdit)
+                    {
+                        <button type="button" class="edit-btn" data-field="description" title="Редактировать">
+                            <img src="~/icons/edit.svg" alt="✎" width="14" height="14" />
+                        </button>
+                    }
+                </label>
+                <p id="descriptionDisplay">@(string.IsNullOrWhiteSpace(Model.Request.Description) ? "—" : Model.Request.Description)</p>
             </div>
         </div>
     </section>
 
-    <!-- 🔹 Комментарии -->
+    <!-- История изменений статуса -->
+    @if (Model.StatusHistory.Any())
+    {
+        <section class="history-section">
+            <h2>История изменений статуса</h2>
+            <div class="history-timeline">
+                @foreach (var history in Model.StatusHistory.OrderByDescending(h => h.ChangedAt))
+                {
+                    <div class="history-item">
+                        <div class="history-icon">
+                            <div class="icon-circle"></div>
+                            <div class="timeline-line"></div>
+                        </div>
+                        <div class="history-content">
+                            <div class="history-date">@history.ChangedAt.ToString("dd.MM.yyyy HH:mm")</div>
+                            <div class="history-text">
+                                <span class="history-status">
+                                    @history.Status
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+
+    <!-- Комментарии -->
     <section class="comments-section">
         <h2>Комментарии</h2>
 
@@ -110,7 +213,9 @@
                                 <div class="files">
                                     @foreach (var a in c.Attachments)
                                     {
-                                        <a href="@a.FilePath" target="_blank">@System.IO.Path.GetFileName(a.FilePath)</a>
+                                        <a href="@a.FilePath" target="_blank" class="file-link">
+                                            @System.IO.Path.GetFileName(a.FilePath)
+                                        </a>
                                     }
                                 </div>
                             }
@@ -127,24 +232,32 @@
     <button id="openCommentModal" type="button" class="btn primary">Добавить комментарий</button>
 </div>
 
-<!--  Модалка -->
+<!-- Модалка комментария -->
 <div id="commentModal" class="modal hidden">
     <div class="modal-box">
         <button type="button" id="closeCommentModal" class="close-button">✕</button>
-
         <h3>Добавить комментарий</h3>
-        <form method="post" enctype="multipart/form-data" asp-page-handler="AddComment">
-            <textarea name="NewCommentContent" rows="4" placeholder="Введите комментарий..." required></textarea>
+
+        <!-- ИСПРАВЛЕННАЯ ФОРМА: отключена валидация jQuery -->
+        <form id="commentForm" method="post" enctype="multipart/form-data"
+              asp-page-handler="AddComment"
+              novalidate="novalidate"
+              onsubmit="return validateCommentForm(this)">
+            @Html.AntiForgeryToken()
+
+            <textarea name="NewCommentContent" rows="4" placeholder="Введите комментарий..." id="commentTextarea"></textarea>
 
             <div class="form-row">
                 <label class="file-upload">
-                    <input type="file" name="UploadFile" hidden />
+                    <input type="file" name="UploadFile" id="commentFile" hidden />
                     <span>Прикрепить файл</span>
                 </label>
                 <label class="checkbox">
-                    <input type="checkbox" name="IsInternal" /> Внутренний комментарий
+                    <input type="checkbox" name="IsInternal" id="isInternalCheckbox" /> Внутренний комментарий
                 </label>
             </div>
+
+            <div id="fileName" class="file-name"></div>
 
             <div class="modal-actions">
                 <button type="button" id="cancelComment" class="btn secondary">Отмена</button>
@@ -153,3 +266,117 @@
         </form>
     </div>
 </div>
+
+<!-- Скрипт для комментариев -->
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        console.log('Details page loaded - комментарии инициализированы');
+
+        const modal = document.getElementById("commentModal");
+        const openBtn = document.getElementById("openCommentModal");
+        const closeBtn = document.getElementById("closeCommentModal");
+        const cancelBtn = document.getElementById("cancelComment");
+        const fileInput = document.getElementById('commentFile');
+        const fileNameDisplay = document.getElementById('fileName');
+
+        // Показать/скрыть модалку
+        if (openBtn && modal) {
+            openBtn.addEventListener("click", function() {
+                console.log('Открытие модалки комментария');
+                modal.classList.remove("hidden");
+                document.body.style.overflow = "hidden";
+            });
+        }
+
+        if (closeBtn && modal) {
+            closeBtn.addEventListener("click", function() {
+                closeCommentModal();
+            });
+        }
+
+        if (cancelBtn && modal) {
+            cancelBtn.addEventListener("click", function() {
+                closeCommentModal();
+            });
+        }
+
+        if (modal) {
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    closeCommentModal();
+                }
+            });
+        }
+
+        // Показать имя файла
+        if (fileInput && fileNameDisplay) {
+            fileInput.addEventListener('change', function() {
+                if (this.files.length > 0) {
+                    fileNameDisplay.textContent = 'Файл: ' + this.files[0].name;
+                } else {
+                    fileNameDisplay.textContent = '';
+                }
+            });
+        }
+
+        // Функция закрытия модалки
+        function closeCommentModal() {
+            if (modal) {
+                modal.classList.add("hidden");
+                document.body.style.overflow = "";
+                const form = document.getElementById('commentForm');
+                if (form) form.reset();
+                if (fileNameDisplay) fileNameDisplay.textContent = '';
+                console.log('Модалка комментария закрыта');
+            }
+        }
+
+        // Принудительно отключить валидацию jQuery для этой формы
+        const commentForm = document.getElementById('commentForm');
+        if (commentForm && window.jQuery && $.fn.validate) {
+            console.log('Отключаем jQuery валидацию для формы комментария');
+
+            // Отключаем unobtrusive validation
+            $(commentForm).removeData("validator");
+            $(commentForm).removeData("unobtrusiveValidation");
+
+            // Отключаем стандартную jQuery валидацию
+            $.validator.unobtrusive.adapters = [];
+            $.validator.unobtrusive.parse = function() { };
+
+            // Отключаем валидацию для этой конкретной формы
+            $(commentForm).validate({
+                ignore: ":hidden, :disabled",
+                rules: {},
+                messages: {},
+                errorPlacement: function() {},
+                submitHandler: function(form) {
+                    console.log('jQuery валидация пропущена, отправляем форму');
+                    return true;
+                }
+            });
+        }
+    });
+
+    // Простая валидация перед отправкой
+    function validateCommentForm(form) {
+        console.log('Проверка формы комментария...');
+
+        const textarea = document.getElementById('commentTextarea');
+        const fileInput = document.getElementById('commentFile');
+
+        const content = textarea ? textarea.value.trim() : '';
+        const hasFile = fileInput && fileInput.files.length > 0;
+
+        console.log('Контент:', content);
+        console.log('Есть файл:', hasFile);
+
+        if (!content && !hasFile) {
+            alert('Пожалуйста, введите комментарий или прикрепите файл');
+            return false;
+        }
+
+        console.log('Форма валидна, отправляем...');
+        return true;
+    }
+</script>

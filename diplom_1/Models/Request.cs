@@ -34,11 +34,7 @@ namespace diplom_1.Models
         public int? BranchId { get; set; }
         public Branch? Branch { get; set; }
 
-        // Убедитесь, что НЕТ этих свойств:
-        // public int? BranchId1 { get; set; }
-        // public Branch? Branch1 { get; set; }
-
-        // Коллекции (могут быть пустыми)
+        
         public ICollection<Comment> Comments { get; set; } = new List<Comment>();
         public ICollection<Attachment> Attachments { get; set; } = new List<Attachment>();
         public ICollection<RequestStatusHistory> StatusHistory { get; set; } = new List<RequestStatusHistory>();

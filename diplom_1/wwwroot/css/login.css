@@ -49,11 +49,18 @@ body {
     margin-bottom: 30px;
 }
 
-/* Поля */
+/* Группа полей с иконкой */
+.form-group {
+    position: relative;
+    margin-bottom: 18px;
+    width: 100%;
+}
+
+/* Поля - отключаем браузерный глаз */
 .form-input {
     width: 100%;
     padding: 14px;
-    margin-bottom: 18px;
+    padding-right: 45px;
     border: 1px solid #d6d8dc;
     border-radius: 10px;
     background-color: #fdfdfd;
@@ -61,7 +68,23 @@ body {
     color: #003049;
     outline: none;
     transition: 0.2s ease;
+    box-sizing: border-box;
 }
+
+    /* Отключаем стандартный глаз браузера */
+    .form-input::-ms-reveal,
+    .form-input::-ms-clear {
+        display: none;
+    }
+
+    .form-input[type="password"]::-webkit-credentials-auto-fill-button,
+    .form-input[type="password"]::-webkit-textfield-decoration-container {
+        display: none !important;
+    }
+
+    .form-input[type="password"] {
+        -webkit-text-security: disc;
+    }
 
     .form-input::placeholder {
         color: #a0a0a0;
@@ -70,6 +93,39 @@ body {
     .form-input:focus {
         border-color: #003049;
         box-shadow: 0 0 4px rgba(0, 48, 73, 0.2);
+    }
+
+/* Иконка глаза */
+.password-toggle {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    padding: 8px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+}
+
+    .password-toggle svg {
+        width: 20px;
+        height: 20px;
+        stroke: #a0a0a0;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+        transition: stroke 0.2s ease;
+    }
+
+    .password-toggle:hover svg {
+        stroke: #003049;
     }
 
 /* Кнопка */
@@ -92,17 +148,42 @@ body {
         transform: translateY(-2px);
     }
 
-/* Ошибки */
+/* Ссылки */
+.link-text {
+    font-size: 14px;
+    color: #787486;
+    margin-top: 24px;
+}
+
+    .link-text a {
+        color: #787486;
+        text-decoration: none;
+        transition: color 0.2s ease;
+    }
+
+        .link-text a:hover {
+            color: #003049;
+        }
+
+/* Сообщения - ПО ЦЕНТРУ */
+.message-container {
+    margin-top: 20px;
+    width: 100%;
+    text-align: center;
+}
+
 .error-message {
     color: #780000;
     font-size: 14px;
-    margin-top: 6px;
-    display: block;
+    text-align: center;
+    margin: 0;
+    padding: 0;
 }
 
-/* Текст */
-.info-text {
-    font-size: 13px;
-    color: #787486;
-    margin-top: 24px;
+.success-message {
+    color: #155724;
+    font-size: 14px;
+    text-align: center;
+    margin: 0;
+    padding: 0;
 }

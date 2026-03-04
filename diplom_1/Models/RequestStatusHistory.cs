@@ -8,6 +8,6 @@
         public Request Request { get; set; }
 
         public string Status { get; set; } = "";
-        public DateTime ChangedAt { get; set; }
+        public DateTime ChangedAt { get; set; } = DateTime.UtcNow;
     }
 }

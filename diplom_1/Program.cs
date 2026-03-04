@@ -1,5 +1,6 @@
 ﻿using diplom_1.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,29 +14,43 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddRazorPages();
 
 // ---------------------------------------
-// 3️⃣ HttpContextAccessor (для доступа к сессии из моделей и сервисов)
+// 3️⃣ HttpContextAccessor
 builder.Services.AddHttpContextAccessor();
 
 // ---------------------------------------
-// 4️⃣ Настройка сессий
+// 4️⃣ Настройка AntiForgery
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "RequestVerificationToken";
+    options.FormFieldName = "__RequestVerificationToken";
+});
+
+// ---------------------------------------
+// 5️⃣ Настройка сессий
 builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromMinutes(30);
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest; // <— исправлено
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
 });
 
-
 // ---------------------------------------
-// 5️⃣ Добавим базовую аутентификацию/авторизацию (даже если не используешь Identity)
+// 6️⃣ Базовая аутентификация/авторизация
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
+
+// ---------------------------------------
+// 7️⃣ НАСТРОЙКА ЛОГИРОВАНИЯ (ДОБАВЬТЕ ЭТО!)
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+builder.Logging.SetMinimumLevel(LogLevel.Information);
 
 var app = builder.Build();
 
 // ---------------------------------------
-// 6️⃣ Конфигурация middleware
+// 8️⃣ Конфигурация middleware
 
 if (!app.Environment.IsDevelopment())
 {
@@ -48,17 +63,13 @@ app.UseStaticFiles();
 
 app.UseRouting();
 
-// ✅ Сначала — аутентификация и авторизация
 app.UseAuthentication();
 app.UseAuthorization();
 
-// ✅ Потом — включаем сессии
 app.UseSession();
 
-// ✅ Подключаем Razor Pages
 app.MapRazorPages();
 
-// ✅ Корректный редирект на страницу логина
 app.MapGet("/", context =>
 {
     context.Response.Redirect("/Login");

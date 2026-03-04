@@ -19,12 +19,176 @@ document.addEventListener("DOMContentLoaded", () => {
     initCreateRequestSubmit();
     bindFilterOrgBranch();
     bindCreateOrgBranch();
+    initFilterCascading();
 
     // Устанавливаем фильтры по умолчанию
     setTimeout(() => {
         clearFilters();
     }, 100);
 });
+
+/* ============================================================
+   ФИЛЬТРЫ: ОРГАНИЗАЦИЯ → ФИЛИАЛ → КЛИЕНТ
+============================================================ */
+
+function initFilterCascading() {
+    const orgFilterMenu = document.getElementById("orgFilterMenu");
+    const branchFilterMenu = document.getElementById("branchFilterMenu");
+    const clientFilterMenu = document.getElementById("clientFilterMenu");
+
+    if (!orgFilterMenu) return;
+
+    // При изменении организаций
+    orgFilterMenu.querySelectorAll(".filter-org").forEach(cb => {
+        cb.addEventListener("change", () => {
+            updateBranchFilterOptions();
+            updateClientFilterOptions();
+        });
+    });
+
+    // При изменении филиалов
+    if (branchFilterMenu) {
+        branchFilterMenu.querySelectorAll(".filter-branch").forEach(cb => {
+            cb.addEventListener("change", () => {
+                updateClientFilterOptions();
+            });
+        });
+    }
+}
+
+function updateBranchFilterOptions() {
+    const selectedOrgs = [...document.querySelectorAll("#orgFilterMenu .filter-org:checked")]
+        .map(cb => cb.value)
+        .filter(v => v !== 'all');
+
+    const branchMenu = document.getElementById("branchFilterMenu");
+    if (!branchMenu) return;
+
+    const allCheckbox = branchMenu.querySelector('input[value="all"]');
+    const branchItems = branchMenu.querySelectorAll(".filter-branch");
+
+    if (selectedOrgs.length === 0) {
+        // Показываем все филиалы
+        branchItems.forEach(item => {
+            item.disabled = false;
+            item.parentElement.style.opacity = "1";
+        });
+        if (allCheckbox) allCheckbox.disabled = false;
+        return;
+    }
+
+    // Получаем филиалы для выбранных организаций
+    const orgBranches = [];
+    selectedOrgs.forEach(orgId => {
+        const orgBranchesForThisOrg = window.allBranches?.filter(b => b.organizationId == orgId) || [];
+        orgBranches.push(...orgBranchesForThisOrg.map(b => b.id));
+    });
+
+    // Обновляем доступность филиалов
+    branchItems.forEach(item => {
+        const branchId = parseInt(item.value);
+        const isAvailable = orgBranches.includes(branchId);
+
+        item.disabled = !isAvailable;
+        item.parentElement.style.opacity = isAvailable ? "1" : "0.4";
+
+        // Снимаем выбор с недоступных
+        if (!isAvailable && item.checked) {
+            item.checked = false;
+        }
+    });
+
+    // Обновляем кнопку "Все"
+    const anyBranchChecked = [...branchItems].some(item => item.checked && !item.disabled);
+    if (allCheckbox) {
+        allCheckbox.disabled = false;
+        if (!anyBranchChecked) {
+            allCheckbox.checked = true;
+        }
+    }
+
+    updateDropdownLabel(branchMenu);
+}
+
+function updateClientFilterOptions() {
+    const clientMenu = document.getElementById("clientFilterMenu");
+    if (!clientMenu) return;
+
+    const selectedOrgs = [...document.querySelectorAll("#orgFilterMenu .filter-org:checked")]
+        .map(cb => cb.value)
+        .filter(v => v !== 'all');
+
+    const selectedBranches = [...document.querySelectorAll("#branchFilterMenu .filter-branch:checked")]
+        .map(cb => cb.value)
+        .filter(v => v !== 'all');
+
+    const clientItems = clientMenu.querySelectorAll(".filter-client");
+    const allCheckbox = clientMenu.querySelector('input[value="all"]');
+
+    if (selectedOrgs.length === 0 && selectedBranches.length === 0) {
+        // Показываем всех клиентов
+        clientItems.forEach(item => {
+            item.disabled = false;
+            item.parentElement.style.opacity = "1";
+        });
+        if (allCheckbox) allCheckbox.disabled = false;
+        return;
+    }
+
+    // Получаем организации выбранных филиалов
+    const branchOrgIds = [];
+    if (selectedBranches.length > 0) {
+        selectedBranches.forEach(branchId => {
+            const branch = window.allBranches?.find(b => b.id == branchId);
+            if (branch?.organizationId) {
+                branchOrgIds.push(branch.organizationId);
+            }
+        });
+    }
+
+    const allowedOrgIds = [...selectedOrgs, ...branchOrgIds].map(id => parseInt(id));
+
+    // Фильтруем клиентов
+    clientItems.forEach(item => {
+        const clientName = item.value;
+        const client = window.allUsers?.find(u => u.fullName === clientName);
+
+        let isAvailable = false;
+
+        if (client) {
+            // Проверяем принадлежность к организациям
+            const clientOrgIds = client.organizations || [];
+            isAvailable = allowedOrgIds.some(orgId => clientOrgIds.includes(orgId));
+
+            // Если выбран филиал, проверяем и его
+            if (isAvailable && selectedBranches.length > 0) {
+                const clientBranchIds = client.branches || [];
+                isAvailable = selectedBranches.some(branchId =>
+                    clientBranchIds.includes(parseInt(branchId))
+                );
+            }
+        }
+
+        item.disabled = !isAvailable;
+        item.parentElement.style.opacity = isAvailable ? "1" : "0.4";
+
+        // Снимаем выбор с недоступных
+        if (!isAvailable && item.checked) {
+            item.checked = false;
+        }
+    });
+
+    // Обновляем кнопку "Все"
+    const anyClientChecked = [...clientItems].some(item => item.checked && !item.disabled);
+    if (allCheckbox) {
+        allCheckbox.disabled = false;
+        if (!anyClientChecked) {
+            allCheckbox.checked = true;
+        }
+    }
+
+    updateDropdownLabel(clientMenu);
+}
 
 /* ============================================================
    FILTER PANEL TOGGLE
@@ -109,7 +273,12 @@ function updateDropdownLabel(menu) {
     const all = menu.querySelector("input[value='all']");
     const checked = [...menu.querySelectorAll("input:not([value='all']):checked")];
 
-    toggle.classList.remove("active");
+    // Убираем/добавляем класс активного фильтра
+    if (checked.length > 0) {
+        toggle.classList.add("has-filter");
+    } else {
+        toggle.classList.remove("has-filter");
+    }
 
     if (all && all.checked) {
         toggle.textContent =
@@ -128,7 +297,6 @@ function updateDropdownLabel(menu) {
     }
 
     toggle.textContent = `Выбрано (${checked.length})`;
-    toggle.classList.add("active");
 }
 
 /* ============================================================
@@ -148,6 +316,12 @@ function initSearch() {
         });
 
         updateStatsByFilters();
+
+        // Обновляем аналитику, если она открыта
+        const analyticsSection = document.getElementById("analyticsSection");
+        if (analyticsSection && !analyticsSection.classList.contains("collapsed")) {
+            renderAnalyticsCharts();
+        }
     });
 }
 
@@ -626,6 +800,13 @@ function applyFilters() {
     });
 
     updateStatsByFilters();
+
+    // 🔹 ОБНОВЛЯЕМ АНАЛИТИКУ, если она видима
+    const analyticsSection = document.getElementById("analyticsSection");
+    if (analyticsSection && !analyticsSection.classList.contains("collapsed")) {
+        renderAnalyticsCharts();
+    }
+
     showToast("Фильтры применены");
 }
 
@@ -647,6 +828,8 @@ function clearFilters() {
         else if (t.id.includes("client")) t.textContent = "Все клиенты";
         else if (t.id.includes("status")) t.textContent = "Создана, В работе";
         else t.textContent = "Все";
+
+        t.classList.remove("has-filter");
     });
 
     const now = new Date();
@@ -655,6 +838,13 @@ function clearFilters() {
     document.getElementById("dateTo").value = now.toISOString().split("T")[0];
 
     applyFilters();
+
+    // 🔹 ОБНОВЛЯЕМ АНАЛИТИКУ
+    const analyticsSection = document.getElementById("analyticsSection");
+    if (analyticsSection && !analyticsSection.classList.contains("collapsed")) {
+        renderAnalyticsCharts();
+    }
+
     showToast("Фильтры сброшены");
 }
 
@@ -733,12 +923,15 @@ function initAnalyticsToggle() {
         if (!collapsed && !analyticsRendered) {
             renderAnalyticsCharts();
             analyticsRendered = true;
+        } else if (!collapsed) {
+            renderAnalyticsCharts();
         }
     });
 }
 
 function renderAnalyticsCharts() {
-    const rows = [...document.querySelectorAll("#requestsTable tbody tr")];
+    const rows = [...document.querySelectorAll("#requestsTable tbody tr")]
+        .filter(r => r.style.display !== "none");
 
     const statuses = {
         Создана: 0,
@@ -751,15 +944,27 @@ function renderAnalyticsCharts() {
 
     rows.forEach(r => {
         const s = r.children[7].textContent.trim();
-        statuses[s]++;
+        if (statuses.hasOwnProperty(s)) {
+            statuses[s]++;
+        }
         const d = r.children[r.children.length - 1].textContent.trim();
         dates[d] = (dates[d] || 0) + 1;
     });
 
-    // Круговая диаграмма статусов
+    // Удаляем старые графики
     const statusChartCtx = document.getElementById("chartStatus");
+    const datesChartCtx = document.getElementById("chartDates");
+
+    if (window.statusChartInstance) {
+        window.statusChartInstance.destroy();
+    }
+    if (window.datesChartInstance) {
+        window.datesChartInstance.destroy();
+    }
+
+    // Круговая диаграмма статусов
     if (statusChartCtx) {
-        new Chart(statusChartCtx, {
+        window.statusChartInstance = new Chart(statusChartCtx, {
             type: "doughnut",
             data: {
                 labels: Object.keys(statuses),
@@ -768,14 +973,21 @@ function renderAnalyticsCharts() {
                     backgroundColor: ['#60a5fa', '#facc15', '#22c55e', '#ef4444']
                 }]
             },
-            options: { responsive: true, maintainAspectRatio: true }
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
         });
     }
 
     // Гистограмма по датам
-    const datesChartCtx = document.getElementById("chartDates");
     if (datesChartCtx) {
-        new Chart(datesChartCtx, {
+        window.datesChartInstance = new Chart(datesChartCtx, {
             type: "bar",
             data: {
                 labels: Object.keys(dates),
@@ -789,7 +1001,16 @@ function renderAnalyticsCharts() {
                 responsive: true,
                 maintainAspectRatio: true,
                 scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 }
+                    },
+                    x: {
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 0
+                        }
+                    }
                 }
             }
         });
