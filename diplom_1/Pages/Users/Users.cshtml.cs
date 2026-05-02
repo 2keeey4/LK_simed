@@ -396,6 +396,7 @@ namespace diplom_1.Pages.Users
                     kpp = o.KPP,
                     ogrn = o.OGRN,
                     workHoursLimit = o.WorkHoursLimit,
+                    products = o.OrganizationProducts.Select(op => op.Product.Name).ToList(),
                     canEdit = isSuperAdmin || canEditOrgPermissions.Contains(o.Id),
                     canDelete = isSuperAdmin || canDeleteOrgPermissions.Contains(o.Id)
                 })
@@ -411,6 +412,7 @@ namespace diplom_1.Pages.Users
             });
         }
 
+        
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> OnPostSaveOrgAsync([FromBody] OrgDto dto)
         {
@@ -450,6 +452,20 @@ namespace diplom_1.Pages.Users
                         WorkHoursLimit = dto.WorkHoursLimit
                     };
                     _context.Organizations.Add(org);
+                    await _context.SaveChangesAsync();
+
+                    if (dto.ProductIds != null && dto.ProductIds.Any())
+                    {
+                        foreach (var productId in dto.ProductIds)
+                        {
+                            _context.OrganizationProducts.Add(new OrganizationProduct
+                            {
+                                OrganizationId = org.Id,
+                                ProductId = productId
+                            });
+                        }
+                        await _context.SaveChangesAsync();
+                    }
                 }
                 else
                 {
@@ -462,9 +478,24 @@ namespace diplom_1.Pages.Users
                     org.KPP = dto.Kpp ?? "";
                     org.OGRN = dto.Ogrn ?? "";
                     org.WorkHoursLimit = dto.WorkHoursLimit;
+
+                    var oldProducts = _context.OrganizationProducts.Where(op => op.OrganizationId == org.Id);
+                    _context.OrganizationProducts.RemoveRange(oldProducts);
+
+                    if (dto.ProductIds != null && dto.ProductIds.Any())
+                    {
+                        foreach (var productId in dto.ProductIds)
+                        {
+                            _context.OrganizationProducts.Add(new OrganizationProduct
+                            {
+                                OrganizationId = org.Id,
+                                ProductId = productId
+                            });
+                        }
+                    }
+                    await _context.SaveChangesAsync();
                 }
 
-                await _context.SaveChangesAsync();
                 return new JsonResult(new { success = true });
             }
             catch (Exception ex)
@@ -725,6 +756,25 @@ namespace diplom_1.Pages.Users
             return new JsonResult(new { orgs, perms, roles });
         }
 
+        public async Task<IActionResult> OnGetGetProductsForOrgAsync(int orgId)
+        {
+            var allProducts = await _context.Products
+                .OrderBy(p => p.Name)
+                .Select(p => new { p.Id, p.Name })
+                .ToListAsync();
+
+            var selectedProductIds = await _context.OrganizationProducts
+                .Where(op => op.OrganizationId == orgId)
+                .Select(op => op.ProductId)
+                .ToListAsync();
+
+            return new JsonResult(new
+            {
+                allProducts = allProducts,
+                selectedProductIds = selectedProductIds
+            });
+        }
+
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> OnPostUploadPhotoAsync(IFormFile photo)
         {
@@ -855,6 +905,7 @@ namespace diplom_1.Pages.Users
             public string? Kpp { get; set; }
             public string? Ogrn { get; set; }
             public double WorkHoursLimit { get; set; }
+            public List<int>? ProductIds { get; set; }
         }
 
         public class BranchDto

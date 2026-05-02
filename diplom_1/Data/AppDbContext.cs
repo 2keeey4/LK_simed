@@ -26,6 +26,7 @@ namespace diplom_1.Data
         public DbSet<Role> Roles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
         public DbSet<RequestStatusHistory> RequestStatusHistories { get; set; }
+        public DbSet<OrganizationProduct> OrganizationProducts { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -143,6 +144,22 @@ namespace diplom_1.Data
                 .WithMany(c => c.Attachments)
                 .HasForeignKey(a => a.CommentId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // OrganizationProduct (многие ко многим)
+            modelBuilder.Entity<OrganizationProduct>(entity =>
+            {
+                entity.HasKey(op => new { op.OrganizationId, op.ProductId });
+
+                entity.HasOne(op => op.Organization)
+                    .WithMany(o => o.OrganizationProducts)
+                    .HasForeignKey(op => op.OrganizationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(op => op.Product)
+                    .WithMany(p => p.OrganizationProducts)
+                    .HasForeignKey(op => op.ProductId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
         }
     }
 }

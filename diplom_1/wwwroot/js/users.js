@@ -69,6 +69,36 @@ async function loadDictionaries() {
     }
 }
 
+async function loadProductsForOrg(orgId) {
+    const container = document.getElementById("orgProductsContainer");
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading-products">Загрузка продуктов...</div>';
+
+    try {
+        const res = await fetch(`/Users/Users?handler=GetProductsForOrg&orgId=${orgId || 0}`);
+        const data = await res.json();
+
+        if (data.allProducts && data.allProducts.length > 0) {
+            let html = '';
+            data.allProducts.forEach(product => {
+                const isChecked = data.selectedProductIds && data.selectedProductIds.includes(product.id);
+                html += `
+                    <label style="display: block; padding: 4px 0;">
+                        <input type="checkbox" class="org-product-checkbox" value="${product.id}" ${isChecked ? 'checked' : ''}>
+                        ${product.name}
+                    </label>
+                `;
+            });
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = '<div class="text-muted">Нет доступных продуктов</div>';
+        }
+    } catch (error) {
+        console.error("Ошибка загрузки продуктов:", error);
+        container.innerHTML = '<div class="text-muted error">Ошибка загрузки продуктов</div>';
+    }
+}
 function renderOrganizationsTree() {
     const container = document.getElementById("organizationsList");
     if (!container) return;
@@ -786,12 +816,19 @@ async function loadOrgs(page = 1) {
             tr.dataset.canEdit = org.canEdit;
             tr.dataset.canDelete = org.canDelete;
             tr.className = "org-row";
+
+            const productsList = org.products || [];
+            const productsDisplay = productsList.length > 0
+                ? (productsList.slice(0, 3).join(', ') + (productsList.length > 3 ? ` +${productsList.length - 3}` : ''))
+                : '-';
+
             tr.innerHTML = `
                 <td>${org.name}</td>
                 <td>${org.inn || ""}</td>
                 <td>${org.kpp || ""}</td>
                 <td>${org.ogrn || ""}</td>
-                <td>${org.workHoursLimit || 0} ч.浮
+                <td>${org.workHoursLimit || 0} ч.</td>
+                <td><span title="${productsList.join(', ')}">${productsDisplay}</span></td>
                 <td>${org.canDelete ? '<button class="btn small danger delete-org">Удалить</button>' : ''}</td>
             `;
             tbody.appendChild(tr);
@@ -809,7 +846,7 @@ async function loadOrgs(page = 1) {
                     } else {
                         showToast("У вас нет прав на удаление этой организации");
                     }
-                } else {
+                } else if (!e.target.closest('td:nth-child(6)')) {
                     await editOrg(tr.dataset.id);
                 }
             });
@@ -818,7 +855,6 @@ async function loadOrgs(page = 1) {
         console.error("Ошибка загрузки организаций:", error);
     }
 }
-
 function renderOrgPagination() {
     const container = document.getElementById("orgsPagination");
     if (!container) return;
@@ -849,6 +885,7 @@ function openOrgModal() {
         document.getElementById(id).value = ""
     );
     document.getElementById("orgWorkHoursLimit").value = 0;
+    loadProductsForOrg(0);  // ← ДОБАВИТЬ
     document.getElementById("orgModal").style.display = "flex";
 }
 
@@ -858,9 +895,9 @@ function closeOrgModal() {
 
 async function editOrg(id) {
     try {
-        const res = await fetch("/Users/Users?handler=GetOrgs");
-        const data = await res.json();
-        const org = data.find(o => o.id == id);
+        const res = await fetch(`/Users/Users?handler=GetOrgs&page=1&pageSize=1000`);
+        const result = await res.json();
+        const org = result.data?.find(o => o.id == id);
 
         if (org) {
             currentOrgId = id;
@@ -872,6 +909,8 @@ async function editOrg(id) {
             document.getElementById("orgOgrn").value = org.ogrn || "";
             document.getElementById("orgWorkHoursLimit").value = org.workHoursLimit || 0;
 
+            await loadProductsForOrg(id);  // ← ДОБАВИТЬ
+
             document.getElementById("orgModalTitle").textContent = canEdit ? "Редактировать организацию" : "Просмотр организации";
 
             const inputs = ["orgName", "orgInn", "orgKpp", "orgOgrn", "orgWorkHoursLimit"];
@@ -880,13 +919,59 @@ async function editOrg(id) {
                 if (input) input.disabled = !canEdit;
             });
 
+            const productCheckboxes = document.querySelectorAll('.org-product-checkbox');
+            productCheckboxes.forEach(cb => cb.disabled = !canEdit);  // ← ДОБАВИТЬ
+
             const saveBtn = document.getElementById("saveOrgBtn");
             if (saveBtn) saveBtn.style.display = canEdit ? "block" : "none";
 
             document.getElementById("orgModal").style.display = "flex";
+        } else {
+            showToast("Организация не найдена");
         }
     } catch (error) {
         console.error("Ошибка:", error);
+        showToast("Ошибка загрузки организации");
+    }
+}
+
+async function editBranch(id) {
+    try {
+        const res = await fetch(`/Users/Users?handler=GetBranches&page=1&pageSize=1000`);
+        const result = await res.json();
+        const branch = result.data?.find(b => b.id == id);
+
+        if (branch) {
+            currentBranchId = id;
+            const canEdit = branch.canEdit;
+
+            document.getElementById("branchAddress").value = branch.address;
+            await populateBranchSelect(branch.organizationId);
+
+            document.getElementById("branchModalTitle").textContent = canEdit ? "Редактировать филиал" : "Просмотр филиала";
+
+            const addressInput = document.getElementById("branchAddress");
+            if (addressInput) addressInput.disabled = !canEdit;
+
+            const orgSelect = document.getElementById("branchOrgSelect");
+            if (orgSelect) {
+                const selectDiv = orgSelect.querySelector(".select-selected");
+                if (selectDiv) {
+                    selectDiv.style.pointerEvents = canEdit ? "auto" : "none";
+                    selectDiv.style.opacity = canEdit ? "1" : "0.6";
+                }
+            }
+
+            const saveBtn = document.getElementById("saveBranchBtn");
+            if (saveBtn) saveBtn.style.display = canEdit ? "block" : "none";
+
+            document.getElementById("branchModal").style.display = "flex";
+        } else {
+            showToast("Филиал не найден");
+        }
+    } catch (error) {
+        console.error("Ошибка:", error);
+        showToast("Ошибка загрузки филиала");
     }
 }
 
@@ -897,13 +982,17 @@ async function saveOrg() {
         return;
     }
 
+    const productIds = Array.from(document.querySelectorAll('.org-product-checkbox:checked'))
+        .map(cb => parseInt(cb.value));  // ← ДОБАВИТЬ
+
     const payload = {
         id: currentOrgId,
         name,
         inn: document.getElementById("orgInn").value.trim(),
         kpp: document.getElementById("orgKpp").value.trim(),
         ogrn: document.getElementById("orgOgrn").value.trim(),
-        workHoursLimit: parseFloat(document.getElementById("orgWorkHoursLimit").value) || 0
+        workHoursLimit: parseFloat(document.getElementById("orgWorkHoursLimit").value) || 0,
+        productIds: productIds  // ← ДОБАВИТЬ
     };
 
     const token = document.querySelector('#antiForgeryForm input[name="__RequestVerificationToken"]')?.value || "";
@@ -929,6 +1018,7 @@ async function saveOrg() {
         }
     } catch (error) {
         console.error("Ошибка:", error);
+        showToast("Ошибка сервера");
     }
 }
 
@@ -1334,42 +1424,7 @@ function closeBranchModal() {
     document.getElementById("branchModal").style.display = "none";
 }
 
-async function editBranch(id) {
-    try {
-        const res = await fetch("/Users/Users?handler=GetBranches");
-        const data = await res.json();
-        const branch = data.find(b => b.id == id);
 
-        if (branch) {
-            currentBranchId = id;
-            const canEdit = branch.canEdit;
-
-            document.getElementById("branchAddress").value = branch.address;
-            await populateBranchSelect(branch.organizationId);
-
-            document.getElementById("branchModalTitle").textContent = canEdit ? "Редактировать филиал" : "Просмотр филиала";
-
-            const addressInput = document.getElementById("branchAddress");
-            if (addressInput) addressInput.disabled = !canEdit;
-
-            const orgSelect = document.getElementById("branchOrgSelect");
-            if (orgSelect) {
-                const selectDiv = orgSelect.querySelector(".select-selected");
-                if (selectDiv) {
-                    selectDiv.style.pointerEvents = canEdit ? "auto" : "none";
-                    selectDiv.style.opacity = canEdit ? "1" : "0.6";
-                }
-            }
-
-            const saveBtn = document.getElementById("saveBranchBtn");
-            if (saveBtn) saveBtn.style.display = canEdit ? "block" : "none";
-
-            document.getElementById("branchModal").style.display = "flex";
-        }
-    } catch (error) {
-        console.error("Ошибка:", error);
-    }
-}
 async function saveBranch() {
     const address = document.getElementById("branchAddress").value.trim();
     const selectContainer = document.getElementById("branchOrgSelect");

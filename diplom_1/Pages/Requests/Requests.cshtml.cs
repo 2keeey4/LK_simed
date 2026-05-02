@@ -123,8 +123,9 @@ namespace diplom_1.Pages.Requests
                 .OrderBy(u => u.FullName)
                 .ToListAsync();
 
-            DateTime from = DateTime.SpecifyKind(new DateTime(DateTime.Now.Year, 1, 1), DateTimeKind.Utc);
-            DateTime to = DateTime.SpecifyKind(DateTime.Now, DateTimeKind.Utc);
+            // Загружаем заявки за последние 12 месяцев (или все, если убрать условие)
+            DateTime from = DateTime.UtcNow.AddMonths(-12);
+            DateTime to = DateTime.UtcNow;
 
             var list = await _context.Requests
                 .Include(r => r.Organization)

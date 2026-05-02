@@ -928,3 +928,77 @@ h2 {
         min-width: 35px;
         text-align: center;
     }
+
+/* ========== ПРОДУКТЫ В ОРГАНИЗАЦИЯХ ========== */
+
+/* Колонка продуктов в таблице */
+.org-row td:nth-child(6) {
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: help;
+    color: #2c3e50;
+    font-size: 12px;
+}
+
+/* Контейнер продуктов в модалке */
+#orgProductsContainer {
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 8px;
+    margin-top: 4px;
+    background: #f8fafc;
+}
+
+    #orgProductsContainer label {
+        display: block;
+        padding: 6px 0;
+        cursor: pointer;
+        font-size: 13px;
+        color: #334155;
+        transition: background 0.2s;
+    }
+
+        #orgProductsContainer label:hover {
+            background: #eef2ff;
+            margin-left: -4px;
+            padding-left: 4px;
+            border-radius: 4px;
+        }
+
+    #orgProductsContainer input[type="checkbox"] {
+        margin-right: 10px;
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        accent-color: #3b82f6;
+        vertical-align: middle;
+    }
+
+.loading-products {
+    color: #94a3b8;
+    text-align: center;
+    padding: 12px;
+    font-size: 12px;
+    font-style: italic;
+}
+
+/* Адаптация для маленьких экранов */
+@media (max-width: 768px) {
+    .org-row td:nth-child(6) {
+        max-width: 120px;
+        font-size: 10px;
+    }
+
+    #orgProductsContainer {
+        max-height: 120px;
+    }
+
+        #orgProductsContainer label {
+            font-size: 11px;
+            padding: 4px 0;
+        }
+}

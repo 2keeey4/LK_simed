@@ -11,5 +11,7 @@ namespace diplom_1.Models
         public ICollection<Module>? Modules { get; set; }
         public ICollection<Edition> Editions { get; set; } = new List<Edition>();
         public ICollection<License> Licenses { get; set; } = new List<License>();
+        public ICollection<OrganizationProduct> OrganizationProducts { get; set; } = new List<OrganizationProduct>();
+
     }
 }

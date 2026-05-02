@@ -21,9 +21,8 @@ document.addEventListener("DOMContentLoaded", () => {
     bindCreateOrgBranch();
     initFilterCascading();
 
-    // Устанавливаем фильтры по умолчанию
     setTimeout(() => {
-        clearFilters();
+        applyFilters();
     }, 100);
 });
 
@@ -811,35 +810,67 @@ function applyFilters() {
 }
 
 function clearFilters() {
+    // 1. Сбрасываем ВСЕ чекбоксы
     document.querySelectorAll(".dropdown-menu input[type=checkbox]").forEach(cb => {
-        if (cb.classList.contains('filter-status')) {
+        const isStatus = cb.classList.contains('filter-status');
+        const isAll = cb.value === 'all';
+
+        if (isStatus) {
+            // Статусы: Создана и В работе — true, остальные false
             cb.checked = (cb.value === 'Создана' || cb.value === 'В работе');
-        } else if (cb.value === 'all') {
+        } else if (isAll) {
+            // "Все" — checked
             cb.checked = true;
         } else {
+            // Остальные фильтры (орг, филиал, продукт, клиент) — false
             cb.checked = false;
         }
     });
 
+    // 2. Обновляем текст кнопок-переключателей
     document.querySelectorAll(".dropdown-toggle").forEach(t => {
-        if (t.id.includes("org")) t.textContent = "Все организации";
-        else if (t.id.includes("branch")) t.textContent = "Все филиалы";
-        else if (t.id.includes("product")) t.textContent = "Все продукты";
-        else if (t.id.includes("client")) t.textContent = "Все клиенты";
-        else if (t.id.includes("status")) t.textContent = "Создана, В работе";
-        else t.textContent = "Все";
-
-        t.classList.remove("has-filter");
+        if (t.id.includes("org")) {
+            t.textContent = "Все организации";
+            t.classList.remove("has-filter");
+        }
+        else if (t.id.includes("branch")) {
+            t.textContent = "Все филиалы";
+            t.classList.remove("has-filter");
+        }
+        else if (t.id.includes("product")) {
+            t.textContent = "Все продукты";
+            t.classList.remove("has-filter");
+        }
+        else if (t.id.includes("client")) {
+            t.textContent = "Все клиенты";
+            t.classList.remove("has-filter");
+        }
+        else if (t.id.includes("status")) {
+            t.textContent = "Создана, В работе";
+            t.classList.add("has-filter"); // ← важно: показывает что фильтр активен
+        }
     });
 
+    // 3. Даты за последние 12 месяцев
     const now = new Date();
-    const startOfYear = new Date(now.getFullYear(), 0, 1);
-    document.getElementById("dateFrom").value = startOfYear.toISOString().split("T")[0];
-    document.getElementById("dateTo").value = now.toISOString().split("T")[0];
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(now.getMonth() - 12);
 
+    const dateFrom = document.getElementById("dateFrom");
+    const dateTo = document.getElementById("dateTo");
+
+    if (dateFrom) dateFrom.value = twelveMonthsAgo.toISOString().split("T")[0];
+    if (dateTo) dateTo.value = now.toISOString().split("T")[0];
+
+    // 4. Принудительно обновляем dropdown лейблы
+    document.querySelectorAll(".dropdown-menu").forEach(menu => {
+        updateDropdownLabel(menu);
+    });
+
+    // 5. Применяем фильтры
     applyFilters();
 
-    // 🔹 ОБНОВЛЯЕМ АНАЛИТИКУ
+    // 6. Обновляем аналитику
     const analyticsSection = document.getElementById("analyticsSection");
     if (analyticsSection && !analyticsSection.classList.contains("collapsed")) {
         renderAnalyticsCharts();
@@ -847,7 +878,6 @@ function clearFilters() {
 
     showToast("Фильтры сброшены");
 }
-
 function collectFilters() {
     return {
         orgs: checked(".filter-org"),
