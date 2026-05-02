@@ -7,6 +7,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace diplom_1.Pages
 {
@@ -41,17 +42,17 @@ namespace diplom_1.Pages
             return Page();
         }
 
-        public IActionResult OnPost()
+        public async Task<IActionResult> OnPost()
         {
             if (!ModelState.IsValid)
                 return Page();
 
             var passwordHash = ComputeSha256Hash(Input.Password);
 
-            var user = _context.Users
+            var user = await _context.Users
                 .Include(u => u.UserPermissions)
                     .ThenInclude(up => up.Permission)
-                .FirstOrDefault(u => u.Login == Input.Login && u.Password == passwordHash);
+                .FirstOrDefaultAsync(u => u.Login == Input.Login && u.Password == passwordHash);
 
             if (user == null)
             {
@@ -59,27 +60,35 @@ namespace diplom_1.Pages
                 return Page();
             }
 
-            // собираем список прав
             var permissions = user.UserPermissions
                 .Select(up => $"{up.Permission.Module}:{up.Permission.Action}")
                 .Distinct()
                 .ToList();
 
-            HttpContext.Session.SetInt32("UserId", user.Id);
+            var userOrganizations = await _context.UserOrganizations
+                .Where(uo => uo.UserId == user.Id)
+                .Select(uo => uo.OrganizationId)
+                .ToListAsync();
 
+            var userBranches = await _context.UserBranches
+                .Where(ub => ub.UserId == user.Id)
+                .Select(ub => ub.BranchId)
+                .ToListAsync();
+
+            HttpContext.Session.SetInt32("UserId", user.Id);
             HttpContext.Session.SetString("Login", user.Login);
             HttpContext.Session.SetString("FullName", user.FullName);
             HttpContext.Session.SetString("UserPermissions", string.Join(",", permissions));
             HttpContext.Session.SetString("Email", user.Email ?? "");
-
+            HttpContext.Session.SetString("UserOrganizations", string.Join(",", userOrganizations));
+            HttpContext.Session.SetString("UserBranches", string.Join(",", userBranches));
+            HttpContext.Session.SetInt32("IsSuperAdmin", user.IsSuperAdmin ? 1 : 0);
 
             var photoPath = string.IsNullOrEmpty(user.PhotoPath)
                 ? "/icons/default-avatar.png"
                 : user.PhotoPath;
-            
 
             HttpContext.Session.SetString("PhotoPath", photoPath);
-
 
             return RedirectToPage("/Dashboard/Dashboard");
         }

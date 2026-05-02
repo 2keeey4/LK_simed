@@ -8,12 +8,18 @@
 <link rel="stylesheet" href="~/css/dashboard.css" />
 <script defer src="~/js/dashboard.js"></script>
 
+<form id="antiForgeryForm" method="post">
+    @Html.AntiForgeryToken()
+</form>
+
+<div id="notification" class="notification" style="display: none;"></div>
+
 <div class="profile-container">
     <h2 class="profile-title">Профиль пользователя</h2>
 
     <div class="profile-card">
         <div class="profile-photo-section">
-            <img src="@Url.Content(HttpContext.Session.GetString("PhotoPath") ?? "~/icons/default-avatar.png")"
+            <img src="@Url.Content(HttpContext.Session.GetString("PhotoPath") ?? "/icons/default-avatar.png")"
                  alt="Фото" class="profile-photo" id="profilePhoto" />
 
             <label class="photo-upload">
@@ -29,11 +35,49 @@
             <label>Email</label>
             <input type="email" id="profileEmail" value="@HttpContext.Session.GetString("Email")" />
 
-           
-
             <div class="actions">
                 <button type="button" class="btn primary" id="saveProfileBtn">Сохранить</button>
             </div>
         </div>
+    </div>
+
+    <div class="org-branch-card">
+        <h3 class="org-branch-title">Мои организации и филиалы</h3>
+
+        @if (!Model.UserOrganizations.Any())
+        {
+            <p class="text-muted">Нет доступных организаций</p>
+        }
+        else
+        {
+            <div class="org-branch-list">
+                @foreach (var org in Model.UserOrganizations)
+                {
+                    <div class="org-item">
+                        <div class="org-header" data-org="@org.Id">
+                            <div class="org-name-wrapper">
+                                <span class="org-name">@org.Name</span>
+                            </div>
+                            @if (org.Branches.Any())
+                            {
+                                <span class="toggle-icon">▼</span>
+                            }
+                        </div>
+
+                        @if (org.Branches.Any())
+                        {
+                            <div class="branches-list" id="branches-org-@org.Id" style="display: none;">
+                                @foreach (var branch in org.Branches)
+                                {
+                                    <div class="branch-item">
+                                        <span class="branch-name">@branch.Address</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
     </div>
 </div>

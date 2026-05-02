@@ -1,8 +1,10 @@
 using diplom_1.Data;
+using diplom_1.Models;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Options;
 using MimeKit;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
@@ -17,11 +19,13 @@ namespace diplom_1.Pages
     {
         private readonly AppDbContext _context;
         private readonly ILogger<ForgotPasswordModel> _logger;
+        private readonly SmtpSettings _smtpSettings;
 
-        public ForgotPasswordModel(AppDbContext context, ILogger<ForgotPasswordModel> logger)
+        public ForgotPasswordModel(AppDbContext context, ILogger<ForgotPasswordModel> logger, IOptions<SmtpSettings> smtpSettings)
         {
             _context = context;
             _logger = logger;
+            _smtpSettings = smtpSettings.Value;
         }
 
         [BindProperty]
@@ -42,24 +46,20 @@ namespace diplom_1.Pages
 
                 if (user == null)
                 {
-                    // Для безопасности не говорим, что пользователь не найден
                     Message = "Если email существует, письмо отправлено.";
                     return Page();
                 }
 
-                // Генерируем токен
                 var token = GenerateToken();
                 user.ResetToken = token;
                 await _context.SaveChangesAsync();
 
-                // Создаем ссылку для сброса пароля
                 var resetLink = Url.Page(
                     "/ResetPassword",
                     null,
                     new { token = token },
                     Request.Scheme);
 
-                // Отправляем email
                 await SendEmailAsync(user.Email, resetLink);
 
                 Message = "Письмо отправлено на вашу почту.";
@@ -77,7 +77,7 @@ namespace diplom_1.Pages
         private async Task SendEmailAsync(string toEmail, string resetLink)
         {
             var message = new MimeMessage();
-            message.From.Add(new MailboxAddress("Поддержка сайта", "k2ee4y@yandex.ru"));
+            message.From.Add(new MailboxAddress(_smtpSettings.FromName, _smtpSettings.FromEmail));
             message.To.Add(new MailboxAddress("", toEmail));
             message.Subject = "Восстановление пароля";
 
@@ -115,7 +115,7 @@ namespace diplom_1.Pages
                         <p>Если вы не запрашивали восстановление пароля, просто проигнорируйте это письмо.</p>
                         <div class='footer'>
                             <p>С уважением, команда поддержки</p>
-                            <p>© 2024 Ваш сайт</p>
+                            <p>© 2025 Ваш сайт</p>
                         </div>
                     </div>
                 </body>
@@ -142,8 +142,8 @@ namespace diplom_1.Pages
             using (var client = new SmtpClient())
             {
                 client.ServerCertificateValidationCallback = (s, c, h, e) => true;
-                await client.ConnectAsync("smtp.yandex.ru", 465, SecureSocketOptions.SslOnConnect);
-                await client.AuthenticateAsync("k2ee4y@yandex.ru", "jjfjngwoequykjpv");
+                await client.ConnectAsync(_smtpSettings.Host, _smtpSettings.Port, SecureSocketOptions.SslOnConnect);
+                await client.AuthenticateAsync(_smtpSettings.Username, _smtpSettings.Password);
                 await client.SendAsync(message);
                 await client.DisconnectAsync(true);
             }

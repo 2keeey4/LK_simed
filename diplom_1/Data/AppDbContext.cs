@@ -7,7 +7,6 @@ namespace diplom_1.Data
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
-        // --- Основные сущности ---
         public DbSet<User> Users { get; set; }
         public DbSet<Organization> Organizations { get; set; }
         public DbSet<Branch> Branches { get; set; }
@@ -32,7 +31,6 @@ namespace diplom_1.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // --- UserOrganization ---
             modelBuilder.Entity<UserOrganization>()
                 .HasKey(uo => new { uo.UserId, uo.OrganizationId });
 
@@ -48,7 +46,6 @@ namespace diplom_1.Data
                 .HasForeignKey(uo => uo.OrganizationId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // --- UserBranch ---
             modelBuilder.Entity<UserBranch>()
                 .HasKey(ub => new { ub.UserId, ub.BranchId });
 
@@ -60,11 +57,10 @@ namespace diplom_1.Data
 
             modelBuilder.Entity<UserBranch>()
                 .HasOne(ub => ub.Branch)
-                .WithMany(b => b.UserBranches)  // Обратная связь только с UserBranches
+                .WithMany(b => b.UserBranches)
                 .HasForeignKey(ub => ub.BranchId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // --- UserPermission ---
             modelBuilder.Entity<UserPermission>()
                 .HasOne(up => up.User)
                 .WithMany(u => u.UserPermissions)
@@ -89,7 +85,6 @@ namespace diplom_1.Data
                 .HasForeignKey(up => up.BranchId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // --- RolePermission ---
             modelBuilder.Entity<RolePermission>()
                 .HasOne(rp => rp.Role)
                 .WithMany(r => r.RolePermissions)
@@ -102,32 +97,29 @@ namespace diplom_1.Data
                 .HasForeignKey(rp => rp.PermissionId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // --- Request (ВАЖНОЕ ИСПРАВЛЕНИЕ!) ---
             modelBuilder.Entity<Request>(entity =>
             {
                 entity.HasOne(r => r.CreatedBy)
-                    .WithMany()  // НЕТ обратной связи в User
+                    .WithMany()
                     .HasForeignKey(r => r.CreatedById)
                     .OnDelete(DeleteBehavior.SetNull);
 
                 entity.HasOne(r => r.Organization)
-                    .WithMany()  // НЕТ обратной связи в Organization
+                    .WithMany()
                     .HasForeignKey(r => r.OrganizationId)
                     .OnDelete(DeleteBehavior.SetNull);
 
-                // ⚠️ ВАЖНО: Указываем, что НЕТ обратной связи в Branch
                 entity.HasOne(r => r.Branch)
-                    .WithMany()  // ПУСТО - НЕТ .WithMany(b => b.Requests)
+                    .WithMany()
                     .HasForeignKey(r => r.BranchId)
                     .OnDelete(DeleteBehavior.SetNull);
 
                 entity.HasOne(r => r.Product)
-                    .WithMany(p => p.Requests)  // ЕСТЬ обратная связь в Product
+                    .WithMany(p => p.Requests)
                     .HasForeignKey(r => r.ProductId)
                     .OnDelete(DeleteBehavior.SetNull);
             });
 
-            // --- Comment ---
             modelBuilder.Entity<Comment>()
                 .HasOne(c => c.Request)
                 .WithMany(r => r.Comments)
@@ -140,7 +132,6 @@ namespace diplom_1.Data
                 .HasForeignKey(c => c.AuthorId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            // --- Attachment ---
             modelBuilder.Entity<Attachment>()
                 .HasOne(a => a.Request)
                 .WithMany(r => r.Attachments)
