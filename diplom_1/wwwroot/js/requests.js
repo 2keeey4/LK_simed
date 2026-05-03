@@ -1,13 +1,11 @@
-﻿/* ============================================================
-   GLOBAL STATE
-============================================================ */
+﻿let filtersVisible = false;
 
-let filtersVisible = false;
-let analyticsRendered = false;
+let trendChart = null;
+let orgChart = null;
+let statusPeriodChart = null;
 
-/* ============================================================
-   INITIALIZATION
-============================================================ */
+let estimateTimer = null;
+let estimateAbortController = null;
 
 document.addEventListener("DOMContentLoaded", () => {
     initFilterPanel();
@@ -15,183 +13,23 @@ document.addEventListener("DOMContentLoaded", () => {
     initSearch();
     initRowClicks();
     initAnalyticsToggle();
+
     initCreateRequestModal();
     initCreateRequestSubmit();
-    bindFilterOrgBranch();
-    bindCreateOrgBranch();
+    initCreateOrgBranch();
+    initEstimateEvents();
+    initCustomSelects();
+
     initFilterCascading();
 
     setTimeout(() => {
-        applyFilters();
+        applyFilters(false);
     }, 100);
 });
 
-/* ============================================================
-   ФИЛЬТРЫ: ОРГАНИЗАЦИЯ → ФИЛИАЛ → КЛИЕНТ
-============================================================ */
-
-function initFilterCascading() {
-    const orgFilterMenu = document.getElementById("orgFilterMenu");
-    const branchFilterMenu = document.getElementById("branchFilterMenu");
-    const clientFilterMenu = document.getElementById("clientFilterMenu");
-
-    if (!orgFilterMenu) return;
-
-    // При изменении организаций
-    orgFilterMenu.querySelectorAll(".filter-org").forEach(cb => {
-        cb.addEventListener("change", () => {
-            updateBranchFilterOptions();
-            updateClientFilterOptions();
-        });
-    });
-
-    // При изменении филиалов
-    if (branchFilterMenu) {
-        branchFilterMenu.querySelectorAll(".filter-branch").forEach(cb => {
-            cb.addEventListener("change", () => {
-                updateClientFilterOptions();
-            });
-        });
-    }
-}
-
-function updateBranchFilterOptions() {
-    const selectedOrgs = [...document.querySelectorAll("#orgFilterMenu .filter-org:checked")]
-        .map(cb => cb.value)
-        .filter(v => v !== 'all');
-
-    const branchMenu = document.getElementById("branchFilterMenu");
-    if (!branchMenu) return;
-
-    const allCheckbox = branchMenu.querySelector('input[value="all"]');
-    const branchItems = branchMenu.querySelectorAll(".filter-branch");
-
-    if (selectedOrgs.length === 0) {
-        // Показываем все филиалы
-        branchItems.forEach(item => {
-            item.disabled = false;
-            item.parentElement.style.opacity = "1";
-        });
-        if (allCheckbox) allCheckbox.disabled = false;
-        return;
-    }
-
-    // Получаем филиалы для выбранных организаций
-    const orgBranches = [];
-    selectedOrgs.forEach(orgId => {
-        const orgBranchesForThisOrg = window.allBranches?.filter(b => b.organizationId == orgId) || [];
-        orgBranches.push(...orgBranchesForThisOrg.map(b => b.id));
-    });
-
-    // Обновляем доступность филиалов
-    branchItems.forEach(item => {
-        const branchId = parseInt(item.value);
-        const isAvailable = orgBranches.includes(branchId);
-
-        item.disabled = !isAvailable;
-        item.parentElement.style.opacity = isAvailable ? "1" : "0.4";
-
-        // Снимаем выбор с недоступных
-        if (!isAvailable && item.checked) {
-            item.checked = false;
-        }
-    });
-
-    // Обновляем кнопку "Все"
-    const anyBranchChecked = [...branchItems].some(item => item.checked && !item.disabled);
-    if (allCheckbox) {
-        allCheckbox.disabled = false;
-        if (!anyBranchChecked) {
-            allCheckbox.checked = true;
-        }
-    }
-
-    updateDropdownLabel(branchMenu);
-}
-
-function updateClientFilterOptions() {
-    const clientMenu = document.getElementById("clientFilterMenu");
-    if (!clientMenu) return;
-
-    const selectedOrgs = [...document.querySelectorAll("#orgFilterMenu .filter-org:checked")]
-        .map(cb => cb.value)
-        .filter(v => v !== 'all');
-
-    const selectedBranches = [...document.querySelectorAll("#branchFilterMenu .filter-branch:checked")]
-        .map(cb => cb.value)
-        .filter(v => v !== 'all');
-
-    const clientItems = clientMenu.querySelectorAll(".filter-client");
-    const allCheckbox = clientMenu.querySelector('input[value="all"]');
-
-    if (selectedOrgs.length === 0 && selectedBranches.length === 0) {
-        // Показываем всех клиентов
-        clientItems.forEach(item => {
-            item.disabled = false;
-            item.parentElement.style.opacity = "1";
-        });
-        if (allCheckbox) allCheckbox.disabled = false;
-        return;
-    }
-
-    // Получаем организации выбранных филиалов
-    const branchOrgIds = [];
-    if (selectedBranches.length > 0) {
-        selectedBranches.forEach(branchId => {
-            const branch = window.allBranches?.find(b => b.id == branchId);
-            if (branch?.organizationId) {
-                branchOrgIds.push(branch.organizationId);
-            }
-        });
-    }
-
-    const allowedOrgIds = [...selectedOrgs, ...branchOrgIds].map(id => parseInt(id));
-
-    // Фильтруем клиентов
-    clientItems.forEach(item => {
-        const clientName = item.value;
-        const client = window.allUsers?.find(u => u.fullName === clientName);
-
-        let isAvailable = false;
-
-        if (client) {
-            // Проверяем принадлежность к организациям
-            const clientOrgIds = client.organizations || [];
-            isAvailable = allowedOrgIds.some(orgId => clientOrgIds.includes(orgId));
-
-            // Если выбран филиал, проверяем и его
-            if (isAvailable && selectedBranches.length > 0) {
-                const clientBranchIds = client.branches || [];
-                isAvailable = selectedBranches.some(branchId =>
-                    clientBranchIds.includes(parseInt(branchId))
-                );
-            }
-        }
-
-        item.disabled = !isAvailable;
-        item.parentElement.style.opacity = isAvailable ? "1" : "0.4";
-
-        // Снимаем выбор с недоступных
-        if (!isAvailable && item.checked) {
-            item.checked = false;
-        }
-    });
-
-    // Обновляем кнопку "Все"
-    const anyClientChecked = [...clientItems].some(item => item.checked && !item.disabled);
-    if (allCheckbox) {
-        allCheckbox.disabled = false;
-        if (!anyClientChecked) {
-            allCheckbox.checked = true;
-        }
-    }
-
-    updateDropdownLabel(clientMenu);
-}
-
-/* ============================================================
-   FILTER PANEL TOGGLE
-============================================================ */
+/* =========================
+   FILTER PANEL
+========================= */
 
 function initFilterPanel() {
     const btn = document.getElementById("toggleFiltersBtn");
@@ -199,7 +37,7 @@ function initFilterPanel() {
     const applyBtn = document.getElementById("applyFiltersBtn");
     const clearBtn = document.getElementById("clearFiltersBtn");
 
-    if (!btn) return;
+    if (!btn || !panel) return;
 
     btn.addEventListener("click", () => {
         filtersVisible = !filtersVisible;
@@ -207,889 +45,1672 @@ function initFilterPanel() {
         btn.textContent = filtersVisible ? "Скрыть фильтры" : "Фильтры";
     });
 
-    applyBtn?.addEventListener("click", applyFilters);
+    applyBtn?.addEventListener("click", () => applyFilters(true));
     clearBtn?.addEventListener("click", clearFilters);
 }
 
-/* ============================================================
+/* =========================
    DROPDOWNS
-============================================================ */
+========================= */
 
 function initDropdowns() {
     document.querySelectorAll(".dropdown-toggle").forEach(toggle => {
         toggle.addEventListener("click", e => {
             e.stopPropagation();
+
             const menu = toggle.nextElementSibling;
+            if (!menu) return;
 
             closeAllDropdowns(menu);
             menu.classList.toggle("hidden");
         });
     });
 
-    document.addEventListener("click", (e) => {
-        if (!e.target.closest('.dropdown')) {
+    document.addEventListener("click", e => {
+        if (!e.target.closest(".dropdown")) {
             closeAllDropdowns(null);
         }
     });
 
     document.querySelectorAll(".dropdown-menu").forEach(menu => {
-        const all = menu.querySelector("input[value='all']");
-        const items = menu.querySelectorAll("input:not([value='all'])");
+        bindDropdownMenu(menu);
+        updateDropdownLabel(menu);
+    });
+}
 
-        if (all) {
-            all.addEventListener("change", (e) => {
-                e.stopPropagation();
-                if (all.checked) {
-                    items.forEach(c => (c.checked = false));
-                }
-                updateDropdownLabel(menu);
-            });
-        }
+function bindDropdownMenu(menu) {
+    const all = menu.querySelector('input[value="all"]');
+    const items = menu.querySelectorAll('input:not([value="all"])');
 
-        items.forEach(cb => {
-            cb.addEventListener("change", (e) => {
-                e.stopPropagation();
-                if (cb.checked && all) all.checked = false;
+    if (all) {
+        all.addEventListener("change", e => {
+            e.stopPropagation();
 
-                if (![...items].some(x => x.checked) && all) {
-                    all.checked = true;
-                }
+            if (all.checked) {
+                items.forEach(item => {
+                    if (!item.disabled) {
+                        item.checked = false;
+                    }
+                });
+            }
 
-                updateDropdownLabel(menu);
-            });
+            updateDropdownLabel(menu);
+        });
+    }
+
+    items.forEach(item => {
+        item.addEventListener("change", e => {
+            e.stopPropagation();
+
+            if (item.checked && all) {
+                all.checked = false;
+            }
+
+            const hasChecked = [...items].some(x => x.checked && !x.disabled);
+
+            if (!hasChecked && all) {
+                all.checked = true;
+            }
+
+            updateDropdownLabel(menu);
         });
     });
 }
 
 function closeAllDropdowns(except) {
     document.querySelectorAll(".dropdown-menu").forEach(menu => {
-        if (menu !== except) menu.classList.add("hidden");
+        if (menu !== except) {
+            menu.classList.add("hidden");
+        }
     });
 }
 
 function updateDropdownLabel(menu) {
     const toggle = menu.previousElementSibling;
-    const all = menu.querySelector("input[value='all']");
-    const checked = [...menu.querySelectorAll("input:not([value='all']):checked")];
+    if (!toggle) return;
 
-    // Убираем/добавляем класс активного фильтра
-    if (checked.length > 0) {
-        toggle.classList.add("has-filter");
-    } else {
-        toggle.classList.remove("has-filter");
-    }
+    const all = menu.querySelector('input[value="all"]');
+    const checked = [...menu.querySelectorAll('input:not([value="all"]):checked')]
+        .filter(x => !x.disabled);
+
+    toggle.classList.toggle("has-filter", checked.length > 0);
 
     if (all && all.checked) {
-        toggle.textContent =
-            toggle.id.includes("org") ? "Все организации" :
-                toggle.id.includes("branch") ? "Все филиалы" :
-                    toggle.id.includes("product") ? "Все продукты" :
-                        toggle.id.includes("client") ? "Все клиенты" :
-                            toggle.id.includes("status") ? "Все статусы" :
-                                "Все";
+        toggle.textContent = getDefaultDropdownText(toggle.id);
         return;
     }
 
     if (checked.length === 0) {
-        toggle.textContent = "Нет выбранных";
+        toggle.textContent = "Не выбрано";
+        return;
+    }
+
+    if (checked.length <= 2) {
+        toggle.textContent = checked
+            .map(cb => cb.parentElement.textContent.trim())
+            .join(", ");
         return;
     }
 
     toggle.textContent = `Выбрано (${checked.length})`;
 }
 
-/* ============================================================
-   SEARCH
-============================================================ */
+function getDefaultDropdownText(toggleId) {
+    if (toggleId.includes("org")) return "Все организации";
+    if (toggleId.includes("branch")) return "Все филиалы";
+    if (toggleId.includes("product")) return "Все продукты";
+    if (toggleId.includes("client")) return "Все клиенты";
+    if (toggleId.includes("status")) return "Все статусы";
+
+    return "Все";
+}
+
+/* =========================
+   FILTER CASCADE
+========================= */
+
+function initFilterCascading() {
+    document.querySelectorAll(".filter-org").forEach(cb => {
+        cb.addEventListener("change", () => {
+            updateBranchFilterOptions();
+            updateProductFilterOptions();
+            updateClientFilterOptions();
+        });
+    });
+
+    document.querySelectorAll(".filter-branch").forEach(cb => {
+        cb.addEventListener("change", () => {
+            updateClientFilterOptions();
+        });
+    });
+}
+
+function updateBranchFilterOptions() {
+    const selectedOrgs = getCheckedValues(".filter-org").map(Number);
+    const menu = document.getElementById("branchFilterMenu");
+
+    if (!menu) return;
+
+    const all = menu.querySelector('input[value="all"]');
+    const items = menu.querySelectorAll(".filter-branch");
+
+    if (selectedOrgs.length === 0) {
+        items.forEach(item => setFilterOptionAvailable(item, true));
+        if (all) all.checked = true;
+        updateDropdownLabel(menu);
+        return;
+    }
+
+    const allowedBranchIds = new Set();
+
+    selectedOrgs.forEach(orgId => {
+        (window.allBranches || [])
+            .filter(branch => Number(branch.organizationId) === orgId)
+            .forEach(branch => allowedBranchIds.add(Number(branch.id)));
+    });
+
+    items.forEach(item => {
+        const available = allowedBranchIds.has(Number(item.value));
+        setFilterOptionAvailable(item, available);
+    });
+
+    const hasChecked = [...items].some(item => item.checked && !item.disabled);
+    if (all) all.checked = !hasChecked;
+
+    updateDropdownLabel(menu);
+}
+
+function updateProductFilterOptions() {
+    const selectedOrgs = getCheckedValues(".filter-org").map(Number);
+    const menu = document.getElementById("productFilterMenu");
+
+    if (!menu || !window.organizationProducts) return;
+
+    const all = menu.querySelector('input[value="all"]');
+    const items = menu.querySelectorAll(".filter-product");
+
+    if (selectedOrgs.length === 0) {
+        items.forEach(item => setFilterOptionAvailable(item, true));
+        if (all) all.checked = true;
+        updateDropdownLabel(menu);
+        return;
+    }
+
+    const allowedProductIds = new Set();
+
+    selectedOrgs.forEach(orgId => {
+        const ids = window.organizationProducts[String(orgId)] || window.organizationProducts[orgId] || [];
+        ids.forEach(id => allowedProductIds.add(Number(id)));
+    });
+
+    items.forEach(item => {
+        const available = allowedProductIds.size === 0 || allowedProductIds.has(Number(item.value));
+        setFilterOptionAvailable(item, available);
+    });
+
+    const hasChecked = [...items].some(item => item.checked && !item.disabled);
+    if (all) all.checked = !hasChecked;
+
+    updateDropdownLabel(menu);
+}
+
+function updateClientFilterOptions() {
+    const menu = document.getElementById("clientFilterMenu");
+
+    if (!menu) return;
+
+    const selectedOrgs = getCheckedValues(".filter-org").map(Number);
+    const selectedBranches = getCheckedValues(".filter-branch").map(Number);
+
+    const all = menu.querySelector('input[value="all"]');
+    const items = menu.querySelectorAll(".filter-client");
+
+    if (selectedOrgs.length === 0 && selectedBranches.length === 0) {
+        items.forEach(item => setFilterOptionAvailable(item, true));
+        if (all) all.checked = true;
+        updateDropdownLabel(menu);
+        return;
+    }
+
+    const branchOrgIds = [];
+
+    selectedBranches.forEach(branchId => {
+        const branch = (window.allBranches || []).find(x => Number(x.id) === branchId);
+        if (branch?.organizationId) {
+            branchOrgIds.push(Number(branch.organizationId));
+        }
+    });
+
+    const allowedOrgIds = [...new Set([...selectedOrgs, ...branchOrgIds])];
+
+    items.forEach(item => {
+        const user = (window.allUsers || []).find(x => x.fullName === item.value);
+        let available = false;
+
+        if (user) {
+            const userOrgIds = (user.organizations || []).map(Number);
+            const userBranchIds = (user.branches || []).map(Number);
+
+            available = allowedOrgIds.some(id => userOrgIds.includes(id));
+
+            if (available && selectedBranches.length > 0) {
+                available = selectedBranches.some(id => userBranchIds.includes(id));
+            }
+        }
+
+        setFilterOptionAvailable(item, available);
+    });
+
+    const hasChecked = [...items].some(item => item.checked && !item.disabled);
+    if (all) all.checked = !hasChecked;
+
+    updateDropdownLabel(menu);
+}
+
+function setFilterOptionAvailable(input, available) {
+    input.disabled = !available;
+
+    const label = input.closest("label");
+    if (label) {
+        label.classList.toggle("disabled", !available);
+    }
+
+    if (!available) {
+        input.checked = false;
+    }
+}
+
+/* =========================
+   SEARCH + FILTERING
+========================= */
 
 function initSearch() {
     const input = document.getElementById("searchInput");
+
     if (!input) return;
 
     input.addEventListener("input", () => {
-        const v = input.value.toLowerCase();
+        input.classList.toggle("active", input.value.trim().length > 0);
+        applyFilters(false);
+    });
+}
 
-        document.querySelectorAll("#requestsTable tbody tr").forEach(row => {
-            const title = row.children[1]?.textContent.toLowerCase();
-            row.style.display = title.includes(v) ? "" : "none";
+function applyFilters(showMessage = true) {
+    const filters = collectFilters();
+    const search = (document.getElementById("searchInput")?.value || "").trim().toLowerCase();
+
+    const orgNames = getSelectedNames(".filter-org");
+    const branchNames = getSelectedNames(".filter-branch");
+    const productNames = getSelectedNames(".filter-product");
+
+    document.querySelectorAll("#requestsTable tbody tr").forEach(row => {
+        const item = getRowData(row);
+        let visible = true;
+
+        if (search) {
+            const searchArea = `${item.title} ${item.topic} ${item.org} ${item.branch} ${item.product} ${item.client}`.toLowerCase();
+
+            if (!searchArea.includes(search)) {
+                visible = false;
+            }
+        }
+
+        if (visible && filters.orgs.length > 0) {
+            visible = filters.orgs.some(id => item.org === orgNames[id]);
+        }
+
+        if (visible && filters.branches.length > 0) {
+            visible = filters.branches.some(id => item.branch === branchNames[id]);
+        }
+
+        if (visible && filters.products.length > 0) {
+            visible = filters.products.some(id => item.product === productNames[id]);
+        }
+
+        if (visible && filters.statuses.length > 0) {
+            visible = filters.statuses.includes(item.status);
+        }
+
+        if (visible && filters.clients.length > 0) {
+            visible = filters.clients.includes(item.client);
+        }
+
+        if (visible && item.date) {
+            const currentDate = parseRuDate(item.date);
+
+            if (currentDate) {
+                if (filters.startDate) {
+                    const start = new Date(filters.startDate);
+                    start.setHours(0, 0, 0, 0);
+
+                    if (currentDate < start) {
+                        visible = false;
+                    }
+                }
+
+                if (visible && filters.endDate) {
+                    const end = new Date(filters.endDate);
+                    end.setHours(23, 59, 59, 999);
+
+                    if (currentDate > end) {
+                        visible = false;
+                    }
+                }
+            }
+        }
+
+        row.style.display = visible ? "" : "none";
+    });
+
+    updateAllAnalytics();
+
+    if (showMessage) {
+        showToast("Фильтры применены");
+    }
+}
+
+function clearFilters() {
+    document.querySelectorAll(".dropdown-menu input[type='checkbox']").forEach(cb => {
+        cb.disabled = false;
+
+        const label = cb.closest("label");
+        if (label) label.classList.remove("disabled");
+
+        if (cb.classList.contains("filter-status")) {
+            cb.checked = cb.value === "Создана" || cb.value === "В работе";
+        } else if (cb.value === "all") {
+            cb.checked = true;
+        } else {
+            cb.checked = false;
+        }
+    });
+
+    document.querySelectorAll(".dropdown-menu").forEach(menu => updateDropdownLabel(menu));
+
+    const statusToggle = document.getElementById("statusFilterToggle");
+    if (statusToggle) {
+        statusToggle.textContent = "Создана, В работе";
+        statusToggle.classList.add("has-filter");
+    }
+
+    const now = new Date();
+    const yearAgo = new Date();
+    yearAgo.setFullYear(now.getFullYear() - 1);
+
+    const dateFrom = document.getElementById("dateFrom");
+    const dateTo = document.getElementById("dateTo");
+
+    if (dateFrom) dateFrom.value = toInputDate(yearAgo);
+    if (dateTo) dateTo.value = toInputDate(now);
+
+    const search = document.getElementById("searchInput");
+
+    if (search) {
+        search.value = "";
+        search.classList.remove("active");
+    }
+
+    updateBranchFilterOptions();
+    updateProductFilterOptions();
+    updateClientFilterOptions();
+
+    applyFilters(false);
+    showToast("Фильтры сброшены");
+}
+
+function collectFilters() {
+    return {
+        orgs: getCheckedValues(".filter-org"),
+        branches: getCheckedValues(".filter-branch"),
+        products: getCheckedValues(".filter-product"),
+        statuses: getCheckedValues(".filter-status"),
+        clients: getCheckedValues(".filter-client"),
+        startDate: document.getElementById("dateFrom")?.value || "",
+        endDate: document.getElementById("dateTo")?.value || ""
+    };
+}
+
+function getCheckedValues(selector) {
+    return [...document.querySelectorAll(`${selector}:checked`)]
+        .filter(cb => cb.value !== "all" && !cb.disabled)
+        .map(cb => cb.value);
+}
+
+function getSelectedNames(selector) {
+    const result = {};
+
+    document.querySelectorAll(`${selector}:checked`).forEach(cb => {
+        result[cb.value] = cb.parentElement.textContent.trim();
+    });
+
+    return result;
+}
+
+function getRowData(row) {
+    const cells = row.children;
+    const hasClientColumn = Boolean(window.canSeeClientColumn);
+
+    return {
+        title: cells[1]?.textContent.trim() || "",
+        topic: cells[2]?.textContent.trim() || "",
+        org: cells[3]?.textContent.trim() || "",
+        branch: cells[4]?.textContent.trim() || "",
+        product: cells[5]?.textContent.trim() || "",
+        priority: cells[6]?.textContent.trim() || "",
+        status: cells[7]?.textContent.trim() || "",
+        client: row.dataset.client || (hasClientColumn ? cells[cells.length - 2]?.textContent.trim() : ""),
+        date: cells[cells.length - 1]?.textContent.trim() || "",
+        hours: Number(row.dataset.workHours || 0)
+    };
+}
+
+/* =========================
+   ROW CLICKS
+========================= */
+
+function initRowClicks() {
+    document.querySelectorAll("#requestsTable tbody tr").forEach(row => {
+        row.addEventListener("dblclick", () => {
+            const id = row.dataset.requestId;
+            if (id) {
+                location.href = `/Requests/Details/${id}`;
+            }
         });
+    });
+}
 
-        updateStatsByFilters();
+/* =========================
+   ANALYTICS
+========================= */
 
-        // Обновляем аналитику, если она открыта
-        const analyticsSection = document.getElementById("analyticsSection");
-        if (analyticsSection && !analyticsSection.classList.contains("collapsed")) {
-            renderAnalyticsCharts();
+function initAnalyticsToggle() {
+    const btn = document.getElementById("toggleAnalyticsBtn");
+    const section = document.getElementById("analyticsSection");
+
+    if (!btn || !section) return;
+
+    btn.addEventListener("click", () => {
+        const collapsed = section.classList.toggle("collapsed");
+        btn.textContent = collapsed ? "Показать аналитику" : "Скрыть аналитику";
+
+        if (!collapsed) {
+            setTimeout(updateAllAnalytics, 120);
         }
     });
 }
 
-/* ============================================================
-   CREATE REQUEST MODAL
-============================================================ */
+function updateAllAnalytics() {
+    const rows = getVisibleRows();
+
+    updateCurrentStats(rows);
+    updateTrendChart(rows);
+    updateOrgChart(rows);
+    updateStatusPeriodChart(rows);
+    updateHoursTable(rows);
+}
+
+function getVisibleRows() {
+    return [...document.querySelectorAll("#requestsTable tbody tr")]
+        .filter(row => row.style.display !== "none");
+}
+
+function updateCurrentStats(rows) {
+    const created = rows.filter(row => getRowData(row).status === "Создана").length;
+    const inWork = rows.filter(row => getRowData(row).status === "В работе").length;
+
+    const currentCreated = document.getElementById("currentCreated");
+    const currentInWork = document.getElementById("currentInWork");
+    const currentActive = document.getElementById("currentActive");
+
+    if (currentCreated) currentCreated.textContent = created;
+    if (currentInWork) currentInWork.textContent = inWork;
+    if (currentActive) currentActive.textContent = created + inWork;
+}
+
+function updateTrendChart(rows) {
+    const canvas = document.getElementById("trendChart");
+    if (!canvas || typeof Chart === "undefined") return;
+
+    const months = {};
+    const monthNames = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
+
+    rows.forEach(row => {
+        const item = getRowData(row);
+        const date = parseRuDate(item.date);
+
+        if (!date) return;
+
+        const monthNumber = String(date.getMonth() + 1).padStart(2, "0");
+        const key = `${date.getFullYear()}-${monthNumber}`;
+
+        if (!months[key]) {
+            months[key] = {
+                label: `${monthNames[date.getMonth()]} ${date.getFullYear()}`,
+                created: 0,
+                finished: 0,
+                cancelled: 0
+            };
+        }
+
+        months[key].created++;
+
+        if (item.status === "Завершена") {
+            months[key].finished++;
+        }
+
+        if (item.status === "Отменена") {
+            months[key].cancelled++;
+        }
+    });
+
+    const keys = Object.keys(months).sort();
+
+    if (trendChart) {
+        trendChart.destroy();
+    }
+
+    trendChart = new Chart(canvas, {
+        type: "line",
+        data: {
+            labels: keys.map(key => months[key].label),
+            datasets: [
+                {
+                    label: "Создано",
+                    data: keys.map(key => months[key].created),
+                    borderColor: "#3b82f6",
+                    backgroundColor: "rgba(59, 130, 246, 0.08)",
+                    tension: 0.35,
+                    fill: true,
+                    pointRadius: 3,
+                    pointHoverRadius: 5
+                },
+                {
+                    label: "Завершено",
+                    data: keys.map(key => months[key].finished),
+                    borderColor: "#22c55e",
+                    backgroundColor: "rgba(34, 197, 94, 0.08)",
+                    tension: 0.35,
+                    fill: true,
+                    pointRadius: 3,
+                    pointHoverRadius: 5
+                },
+                {
+                    label: "Отменено",
+                    data: keys.map(key => months[key].cancelled),
+                    borderColor: "#ef4444",
+                    backgroundColor: "rgba(239, 68, 68, 0.06)",
+                    tension: 0.35,
+                    fill: false,
+                    pointRadius: 3,
+                    pointHoverRadius: 5
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: "index",
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    position: "bottom",
+                    labels: {
+                        boxWidth: 10,
+                        boxHeight: 10,
+                        usePointStyle: true,
+                        font: {
+                            size: 11
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        font: {
+                            size: 11
+                        }
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1,
+                        precision: 0,
+                        font: {
+                            size: 11
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateOrgChart(rows) {
+    const canvas = document.getElementById("orgChart");
+    if (!canvas || typeof Chart === "undefined") return;
+
+    const orgs = {};
+
+    rows.forEach(row => {
+        const org = getRowData(row).org;
+
+        if (!org || org === "-") return;
+
+        orgs[org] = (orgs[org] || 0) + 1;
+    });
+
+    const data = Object.entries(orgs)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8);
+
+    if (orgChart) {
+        orgChart.destroy();
+    }
+
+    orgChart = new Chart(canvas, {
+        type: "bar",
+        data: {
+            labels: data.map(x => x[0]),
+            datasets: [
+                {
+                    label: "Заявок",
+                    data: data.map(x => x[1]),
+                    backgroundColor: "#8b5cf6",
+                    borderRadius: 6,
+                    maxBarThickness: 34
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: data.length > 4 ? "y" : "x",
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1,
+                        precision: 0,
+                        font: {
+                            size: 11
+                        }
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        font: {
+                            size: 11
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateStatusPeriodChart(rows) {
+    const canvas = document.getElementById("statusPeriodChart");
+    const legend = document.getElementById("statusPeriodLegend");
+
+    if (!canvas || typeof Chart === "undefined") return;
+
+    const data = {
+        "Создана": 0,
+        "В работе": 0,
+        "Завершена": 0,
+        "Отменена": 0
+    };
+
+    rows.forEach(row => {
+        const status = getRowData(row).status;
+
+        if (Object.prototype.hasOwnProperty.call(data, status)) {
+            data[status]++;
+        }
+    });
+
+    const labels = Object.keys(data);
+    const values = Object.values(data);
+
+    if (statusPeriodChart) {
+        statusPeriodChart.destroy();
+    }
+
+    statusPeriodChart = new Chart(canvas, {
+        type: "doughnut",
+        data: {
+            labels,
+            datasets: [
+                {
+                    data: values,
+                    backgroundColor: ["#60a5fa", "#facc15", "#22c55e", "#ef4444"],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: "64%",
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: context => {
+                            const total = values.reduce((a, b) => a + b, 0);
+                            const value = context.raw || 0;
+                            const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+
+                            return `${context.label}: ${value} (${percent}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    if (legend) {
+        const total = values.reduce((a, b) => a + b, 0);
+        const colors = ["#60a5fa", "#facc15", "#22c55e", "#ef4444"];
+
+        legend.innerHTML = labels.map((label, index) => {
+            const value = data[label];
+            const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+
+            return `
+                <div class="status-legend-item">
+                    <span class="status-dot" style="background:${colors[index]}"></span>
+                    <span>${escapeHtml(label)}</span>
+                    <strong>${value}</strong>
+                    <small>${percent}%</small>
+                </div>
+            `;
+        }).join("");
+    }
+}
+
+function updateHoursTable() {
+    const container = document.getElementById("hoursTable");
+
+    if (!container) return;
+
+    const filters = collectFilters();
+    const orgNames = getSelectedNames(".filter-org");
+
+    const allRows = [...document.querySelectorAll("#requestsTable tbody tr")];
+
+    const orgStats = {};
+
+    allRows.forEach(row => {
+        const item = getRowData(row);
+        let include = true;
+
+        if (!item.org || item.org === "-") {
+            include = false;
+        }
+
+        if (include && filters.orgs.length > 0) {
+            include = filters.orgs.some(id => item.org === orgNames[id]);
+        }
+
+        if (include && item.date) {
+            const currentDate = parseRuDate(item.date);
+
+            if (currentDate) {
+                if (filters.startDate) {
+                    const start = new Date(filters.startDate);
+                    start.setHours(0, 0, 0, 0);
+
+                    if (currentDate < start) {
+                        include = false;
+                    }
+                }
+
+                if (include && filters.endDate) {
+                    const end = new Date(filters.endDate);
+                    end.setHours(23, 59, 59, 999);
+
+                    if (currentDate > end) {
+                        include = false;
+                    }
+                }
+            }
+        }
+
+        if (!include) return;
+
+        if (!orgStats[item.org]) {
+            orgStats[item.org] = {
+                count: 0,
+                spent: 0,
+                limit: 0
+            };
+        }
+
+        orgStats[item.org].count += 1;
+        orgStats[item.org].spent += Number(item.hours || 0);
+    });
+
+    (window.organizationHours || []).forEach(item => {
+        const name = item.orgName ?? item.OrgName;
+        const limit = Number(item.limitHours ?? item.LimitHours ?? 0);
+
+        if (!name) return;
+
+        if (filters.orgs.length > 0) {
+            const selectedOrgNames = filters.orgs.map(id => orgNames[id]);
+            if (!selectedOrgNames.includes(name)) {
+                return;
+            }
+        }
+
+        if (!orgStats[name]) {
+            orgStats[name] = {
+                count: 0,
+                spent: 0,
+                limit
+            };
+        } else {
+            orgStats[name].limit = limit;
+        }
+    });
+
+    const entries = Object.entries(orgStats)
+        .sort((a, b) => a[0].localeCompare(b[0], "ru"));
+
+    if (entries.length === 0) {
+        container.innerHTML = `<div class="text-muted">Нет данных по лимитам за выбранный период</div>`;
+        return;
+    }
+
+    let html = `
+        <table class="hours-table">
+            <thead>
+                <tr>
+                    <th>Организация</th>
+                    <th>Заявок</th>
+                    <th>Лимит</th>
+                    <th>Потрачено</th>
+                    <th>Остаток</th>
+                    <th>Использование</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    entries.forEach(([org, data]) => {
+        const limit = Number(data.limit || 0);
+        const spent = Number(data.spent || 0);
+        const remaining = Math.max(limit - spent, 0);
+        const percent = limit > 0 ? Math.min((spent / limit) * 100, 100) : 0;
+
+        const progressClass =
+            percent >= 90 ? "danger" :
+                percent >= 70 ? "warning" :
+                    "";
+
+        html += `
+            <tr>
+                <td>${escapeHtml(org)}</td>
+                <td>${data.count}</td>
+                <td>${formatHours(limit)}</td>
+                <td>${formatHours(spent)}</td>
+                <td>${formatHours(remaining)}</td>
+                <td>
+                    <div class="progress-track">
+                        <div class="progress-fill ${progressClass}" style="width:${percent}%"></div>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `
+            </tbody>
+        </table>
+    `;
+
+    container.innerHTML = html;
+}
+/* =========================
+   CREATE MODAL
+========================= */
 
 function initCreateRequestModal() {
     const modal = document.getElementById("createModal");
+
     if (!modal) return;
 
     const open = document.getElementById("btnCreateRequest");
     const close = document.getElementById("closeModalBtn");
     const cancel = document.getElementById("cancelModalBtn");
 
-    const closeModal = () => {
-        modal.classList.add("hidden");
-        document.body.style.overflow = "";
-        // Сбрасываем форму
-        const form = document.getElementById("createRequestForm");
-        if (form) form.reset();
-    };
-
     open?.addEventListener("click", () => {
         modal.classList.remove("hidden");
         document.body.style.overflow = "hidden";
+
+        setTimeout(() => {
+            document.getElementById("reqTitle")?.focus();
+        }, 80);
     });
 
-    close?.addEventListener("click", closeModal);
-    cancel?.addEventListener("click", closeModal);
+    close?.addEventListener("click", closeCreateModal);
+    cancel?.addEventListener("click", closeCreateModal);
 
-    window.addEventListener("click", e => {
+    modal.addEventListener("click", e => {
         if (e.target.classList.contains("modal-overlay")) {
-            closeModal();
+            closeCreateModal();
+        }
+    });
+
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+            closeCreateModal();
         }
     });
 }
 
-/* ============================================================
-   CREATE REQUEST SUBMIT
-============================================================ */
+function closeCreateModal() {
+    const modal = document.getElementById("createModal");
 
-function initCreateRequestSubmit() {
+    if (!modal) return;
+
+    modal.classList.add("hidden");
+    document.body.style.overflow = "";
+
     const form = document.getElementById("createRequestForm");
-    if (!form) return;
+    if (form) form.reset();
 
-    form.addEventListener("submit", async e => {
-        e.preventDefault();
-
-        console.log('=== ОТПРАВКА ФОРМЫ СОЗДАНИЯ ЗАЯВКИ ===');
-
-        // Собираем данные
-        const formData = {
-            title: document.getElementById("reqTitle").value.trim(),
-            topic: document.getElementById("reqTopic").value,
-            org: document.getElementById("reqOrganization").value,
-            branch: document.getElementById("reqBranch").value,
-            product: document.getElementById("reqProduct").value,
-            priority: document.getElementById("reqPriority").value,
-            createdBy: document.getElementById("reqCreatedBy")?.value,
-            description: document.getElementById("reqDescription").value.trim()
-        };
-
-        console.log('Данные формы:', formData);
-
-        // Проверка обязательных полей
-        if (!formData.title) {
-            showToast("Введите заголовок заявки");
-            document.getElementById("reqTitle").focus();
-            return;
-        }
-
-        if (!formData.topic) {
-            showToast("Выберите тему");
-            document.getElementById("reqTopic").focus();
-            return;
-        }
-
-        if (!formData.org) {
-            showToast("Выберите организациию");
-            document.getElementById("reqOrganization").focus();
-            return;
-        }
-
-        if (!formData.product) {
-            showToast("Выберите продукт");
-            document.getElementById("reqProduct").focus();
-            return;
-        }
-
-        if (!formData.priority) {
-            showToast("Выберите приоритет");
-            document.getElementById("reqPriority").focus();
-            return;
-        }
-
-        const createdBySelect = document.getElementById("reqCreatedBy");
-        let createdById;
-        if (createdBySelect) {
-            if (!formData.createdBy) {
-                showToast("Выберите пользователя");
-                createdBySelect.focus();
-                return;
-            }
-            createdById = formData.createdBy;
-        } else {
-            createdById = window.currentUserId || formData.createdBy;
-        }
-
-        console.log('Все проверки пройдены. Создаем FormData...');
-
-        const fd = new FormData();
-
-        const token = document.querySelector("#antiForgeryForm input[name='__RequestVerificationToken']");
-        if (token) {
-            fd.append("__RequestVerificationToken", token.value);
-            console.log('Токен добавлен');
-        }
-
-        fd.append("Title", formData.title);
-        fd.append("Topic", formData.topic);
-        fd.append("OrganizationId", formData.org);
-        fd.append("BranchId", formData.branch || "");
-        fd.append("ProductId", formData.product);
-        fd.append("Priority", formData.priority);
-        fd.append("CreatedById", createdById);
-        fd.append("Description", formData.description);
-
-        console.log('Добавлены поля формы');
-
-        const file = document.getElementById("reqFile");
-        if (file?.files[0]) {
-            fd.append("File", file.files[0]);
-            console.log('Добавлен файл:', file.files[0].name);
-        }
-
-        try {
-            console.log('Отправка запроса на сервер...');
-
-            const url = "?handler=Create";
-            console.log('URL запроса:', url);
-
-            const submitBtn = form.querySelector('button[type="submit"]');
-            const originalText = submitBtn.textContent;
-            submitBtn.textContent = "Создание...";
-            submitBtn.disabled = true;
-
-            const res = await fetch(url, {
-                method: "POST",
-                body: fd
-            });
-
-            console.log('Статус ответа:', res.status, res.statusText);
-
-            submitBtn.textContent = originalText;
-            submitBtn.disabled = false;
-
-            const result = await res.json();
-            console.log('Ответ сервера:', result);
-
-            if (result.success) {
-                showToast("✅ Заявка создана успешно!");
-
-                const modal = document.getElementById("createModal");
-                if (modal) {
-                    modal.classList.add("hidden");
-                    document.body.style.overflow = "";
-                    form.reset();
-                }
-
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                const errorMsg = result.error || result.details || "Неизвестная ошибка";
-                console.error('Ошибка от сервера:', errorMsg);
-                showToast("❌ Ошибка: " + errorMsg);
-            }
-        } catch (error) {
-            console.error('Ошибка при отправке формы:', error);
-
-            const submitBtn = form.querySelector('button[type="submit"]');
-            if (submitBtn) {
-                submitBtn.textContent = "Сохранить";
-                submitBtn.disabled = false;
-            }
-
-            showToast("❌ Ошибка соединения: " + error.message);
-        }
-    });
+    resetCreateDependentFields();
+    resetEstimateBox();
 }
 
-/* ============================================================
-   FILTER → ORG → BRANCH
-============================================================ */
+function resetCreateDependentFields() {
+    const branch = document.getElementById("reqBranch");
+    const product = document.getElementById("reqProduct");
+    const createdBy = document.getElementById("reqCreatedBy");
 
-function bindFilterOrgBranch() {
-    const orgCheckboxes = document.querySelectorAll(".filter-org");
-    const branchMenu = document.getElementById("branchFilterMenu");
+    if (branch) {
+        branch.innerHTML = `<option value="">Выберите филиал</option>`;
+    }
 
-    if (!orgCheckboxes.length || !branchMenu) return;
-
-    orgCheckboxes.forEach(cb => {
-        cb.addEventListener("change", async () => {
-            const ids = [...orgCheckboxes]
-                .filter(x => x.checked && x.value !== "all")
-                .map(x => x.value);
-
-            if (ids.length === 0) {
-                const allBranches = window.allBranches || [];
-                updateBranchFilterMenu(allBranches);
-                return;
-            }
-
-            const firstOrgId = ids[0];
-            try {
-                const allBranches = window.allBranches || [];
-                const filteredBranches = allBranches.filter(b => b.organizationId == firstOrgId);
-                updateBranchFilterMenu(filteredBranches);
-            } catch (error) {
-                console.error('Ошибка загрузки филиалов:', error);
+    if (product) {
+        [...product.options].forEach(option => {
+            if (option.value) {
+                option.hidden = false;
+                option.disabled = false;
             }
         });
-    });
+
+        product.value = "";
+    }
+
+    if (createdBy && window.canCreateForOthers) {
+        createdBy.innerHTML = `<option value="">Выберите пользователя</option>`;
+    }
+    refreshAllCustomSelects();
 }
 
-function updateBranchFilterMenu(branches) {
-    const branchMenu = document.getElementById("branchFilterMenu");
-    if (!branchMenu) return;
+/* =========================
+   CREATE CASCADE
+========================= */
 
-    branchMenu.innerHTML = `
-        <label><input type="checkbox" value="all" checked /> Все</label>
-    `;
-
-    branches.forEach(b => {
-        branchMenu.innerHTML += `
-            <label>
-                <input type="checkbox" class="filter-branch" value="${b.id}"/>
-                ${b.address}
-            </label>`;
-    });
-}
-
-/* ============================================================
-   CREATE MODAL ORG → BRANCH → USER
-============================================================ */
-
-function bindCreateOrgBranch() {
+function initCreateOrgBranch() {
     const org = document.getElementById("reqOrganization");
     const branch = document.getElementById("reqBranch");
-    const createdBy = document.getElementById("reqCreatedBy");
 
     if (!org) return;
 
-    // Функция для загрузки филиалов
-    async function loadBranches(orgId) {
-        if (!branch) return;
-
-        console.log('Загрузка филиалов для организации:', orgId);
-        const currentBranchId = branch.value;
-        branch.innerHTML = `<option value="">Выберите филиал</option>`;
-
-        try {
-            const url = `?handler=ApiBranches&orgId=${orgId}`;
-            const r = await fetch(url);
-
-            if (!r.ok) {
-                const allBranches = window.allBranches || [];
-                const filteredBranches = allBranches.filter(b => b.organizationId == orgId);
-                populateBranchDropdown(filteredBranches, currentBranchId);
-                return;
-            }
-
-            const result = await r.json();
-            if (result.success && result.data && result.data.length > 0) {
-                populateBranchDropdown(result.data, currentBranchId);
-            } else {
-                branch.innerHTML += `<option value="" disabled>Нет филиалов</option>`;
-            }
-        } catch (error) {
-            const allBranches = window.allBranches || [];
-            const filteredBranches = allBranches.filter(b => b.organizationId == orgId);
-            populateBranchDropdown(filteredBranches, currentBranchId);
-        }
-    }
-
-    function populateBranchDropdown(branches, currentBranchId) {
-        branch.innerHTML = `<option value="">Выберите филиал</option>`;
-
-        if (branches && branches.length > 0) {
-            branches.forEach(b => {
-                const option = new Option(b.address, b.id);
-                if (b.id == currentBranchId) option.selected = true;
-                branch.add(option);
-            });
-        }
-    }
-
-    // Функция для загрузки пользователей
-    async function loadUsers(orgId, branchId = null) {
-        if (!createdBy) return;
-
-        console.log('Загрузка пользователей для организации:', orgId, 'филиал:', branchId);
-        const currentUserId = createdBy.value;
-        createdBy.innerHTML = `<option value="">Выберите пользователя</option>`;
-
-        try {
-            let url = `?handler=ApiUsers&orgId=${orgId}`;
-            if (branchId) url += `&branchId=${branchId}`;
-
-            const r = await fetch(url);
-
-            if (!r.ok) {
-                const allUsers = window.allUsers || [];
-                const filteredUsers = allUsers.filter(u =>
-                    u.organizations && u.organizations.includes(parseInt(orgId))
-                );
-                populateUserDropdown(filteredUsers, currentUserId);
-                return;
-            }
-
-            const result = await r.json();
-            if (result.success && result.data && result.data.length > 0) {
-                populateUserDropdown(result.data, currentUserId);
-            }
-        } catch (error) {
-            const allUsers = window.allUsers || [];
-            const filteredUsers = allUsers.filter(u =>
-                u.organizations && u.organizations.includes(parseInt(orgId))
-            );
-            populateUserDropdown(filteredUsers, currentUserId);
-        }
-    }
-
-    function populateUserDropdown(users, currentUserId) {
-        createdBy.innerHTML = `<option value="">Выберите пользователя</option>`;
-
-        if (users && users.length > 0) {
-            users.forEach(u => {
-                const option = new Option(u.fullName, u.id);
-                if (u.id == currentUserId) option.selected = true;
-                createdBy.add(option);
-            });
-        }
-    }
-
-    // Загружаем данные при изменении организации
     org.addEventListener("change", async () => {
-        console.log('Изменена организация:', org.value);
-
         if (!org.value) {
-            if (branch) branch.innerHTML = `<option value="">Выберите филиал</option>`;
-            if (createdBy) createdBy.innerHTML = `<option value="">Выберите пользователя</option>`;
+            resetCreateDependentFields();
+            scheduleEstimateUpdate();
             return;
         }
 
-        await loadBranches(org.value);
-        const branchId = branch?.value || null;
-        await loadUsers(org.value, branchId);
+        await loadCreateBranches(org.value);
+        await loadCreateUsers(org.value, branch?.value || null);
+        filterCreateProducts(org.value);
+
+        scheduleEstimateUpdate();
     });
 
-    // Загружаем пользователей при изменении филиала
     branch?.addEventListener("change", async () => {
-        console.log('Изменен филиал:', branch?.value);
-
         if (!org.value) {
             showToast("Сначала выберите организацию");
             return;
         }
 
-        const branchId = branch.value || null;
-        await loadUsers(org.value, branchId);
+        await loadCreateUsers(org.value, branch.value || null);
+        scheduleEstimateUpdate();
     });
-
-    // Инициализация при открытии модалки
-    const modalOpenBtn = document.getElementById("btnCreateRequest");
-    if (modalOpenBtn) {
-        modalOpenBtn.addEventListener("click", () => {
-            setTimeout(() => {
-                if (org.value) {
-                    loadBranches(org.value);
-                    loadUsers(org.value, branch?.value || null);
-                }
-            }, 100);
-        });
-    }
 }
 
-/* ============================================================
-   APPLY FILTERS
-============================================================ */
+async function loadCreateBranches(orgId) {
+    const branch = document.getElementById("reqBranch");
 
-function applyFilters() {
-    const f = collectFilters();
-    const orgNames = {};
+    if (!branch) return;
 
-    document.querySelectorAll("#orgFilterMenu .filter-org:checked").forEach(cb => {
-        const orgId = cb.value;
-        const orgName = cb.nextSibling?.textContent?.trim();
-        if (orgName) orgNames[orgId] = orgName;
-    });
+    branch.innerHTML = `<option value="">Загрузка...</option>`;
+    branch.disabled = true;
 
-    // Собираем данные из таблицы
-    const tableData = [];
-    document.querySelectorAll("#requestsTable tbody tr").forEach(row => {
-        const cells = row.children;
-        tableData.push({
-            row: row,
-            orgName: cells[3]?.textContent.trim() || '',
-            branch: cells[4]?.textContent.trim() || '',
-            product: cells[5]?.textContent.trim() || '',
-            status: cells[7]?.textContent.trim() || '',
-            date: cells[cells.length - 1]?.textContent.trim() || ''
-        });
-    });
+    try {
+        const result = await fetchJson(`?handler=ApiBranches&orgId=${encodeURIComponent(orgId)}`);
 
-    // Применяем фильтры
-    tableData.forEach(item => {
-        let visible = true;
+        branch.innerHTML = `<option value="">Выберите филиал</option>`;
 
-        // Фильтр по организации
-        if (f.orgs.length > 0 && !f.orgs.includes('all')) {
-            const orgMatch = f.orgs.some(orgId => {
-                const orgNameFromTable = item.orgName;
-                const orgNameFromFilter = orgNames[orgId];
-                return orgNameFromTable === orgNameFromFilter;
+        if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+            result.data.forEach(item => {
+                branch.add(new Option(item.address, item.id));
             });
-            if (!orgMatch) visible = false;
-        }
-
-        // Фильтр по филиалу
-        if (f.branches.length > 0 && !f.branches.includes('all')) {
-            const branchMatch = f.branches.some(branchId => {
-                const branchCheckbox = document.querySelector(`.filter-branch[value="${branchId}"]:checked`);
-                const branchName = branchCheckbox?.nextSibling?.textContent?.trim();
-                return branchName && item.branch.includes(branchName);
-            });
-            if (!branchMatch) visible = false;
-        }
-
-        // Фильтр по продукту
-        if (f.products.length > 0 && !f.products.includes('all')) {
-            const productMatch = f.products.some(productId => {
-                const productCheckbox = document.querySelector(`.filter-product[value="${productId}"]:checked`);
-                const productName = productCheckbox?.nextSibling?.textContent?.trim();
-                return productName && item.product.includes(productName);
-            });
-            if (!productMatch) visible = false;
-        }
-
-        // Фильтр по статусу
-        if (f.statuses.length > 0 && !f.statuses.includes('all')) {
-            const statusMatch = f.statuses.some(status => {
-                return item.status.toLowerCase().includes(status.toLowerCase());
-            });
-            if (!statusMatch) visible = false;
-        }
-
-        // Фильтр по дате
-        if (item.date) {
-            const [dd, mm, yy] = item.date.split(".");
-            const dt = new Date(`${yy}-${mm}-${dd}`);
-
-            if (f.startDate) {
-                const start = new Date(f.startDate);
-                start.setHours(0, 0, 0, 0);
-                if (dt < start) visible = false;
-            }
-
-            if (f.endDate) {
-                const end = new Date(f.endDate);
-                end.setHours(23, 59, 59, 999);
-                if (dt > end) visible = false;
-            }
-        }
-
-        item.row.style.display = visible ? "" : "none";
-    });
-
-    updateStatsByFilters();
-
-    // 🔹 ОБНОВЛЯЕМ АНАЛИТИКУ, если она видима
-    const analyticsSection = document.getElementById("analyticsSection");
-    if (analyticsSection && !analyticsSection.classList.contains("collapsed")) {
-        renderAnalyticsCharts();
-    }
-
-    showToast("Фильтры применены");
-}
-
-function clearFilters() {
-    // 1. Сбрасываем ВСЕ чекбоксы
-    document.querySelectorAll(".dropdown-menu input[type=checkbox]").forEach(cb => {
-        const isStatus = cb.classList.contains('filter-status');
-        const isAll = cb.value === 'all';
-
-        if (isStatus) {
-            // Статусы: Создана и В работе — true, остальные false
-            cb.checked = (cb.value === 'Создана' || cb.value === 'В работе');
-        } else if (isAll) {
-            // "Все" — checked
-            cb.checked = true;
         } else {
-            // Остальные фильтры (орг, филиал, продукт, клиент) — false
-            cb.checked = false;
+            const option = new Option("Нет доступных филиалов", "");
+            option.disabled = true;
+            branch.add(option);
         }
-    });
-
-    // 2. Обновляем текст кнопок-переключателей
-    document.querySelectorAll(".dropdown-toggle").forEach(t => {
-        if (t.id.includes("org")) {
-            t.textContent = "Все организации";
-            t.classList.remove("has-filter");
-        }
-        else if (t.id.includes("branch")) {
-            t.textContent = "Все филиалы";
-            t.classList.remove("has-filter");
-        }
-        else if (t.id.includes("product")) {
-            t.textContent = "Все продукты";
-            t.classList.remove("has-filter");
-        }
-        else if (t.id.includes("client")) {
-            t.textContent = "Все клиенты";
-            t.classList.remove("has-filter");
-        }
-        else if (t.id.includes("status")) {
-            t.textContent = "Создана, В работе";
-            t.classList.add("has-filter"); // ← важно: показывает что фильтр активен
-        }
-    });
-
-    // 3. Даты за последние 12 месяцев
-    const now = new Date();
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setMonth(now.getMonth() - 12);
-
-    const dateFrom = document.getElementById("dateFrom");
-    const dateTo = document.getElementById("dateTo");
-
-    if (dateFrom) dateFrom.value = twelveMonthsAgo.toISOString().split("T")[0];
-    if (dateTo) dateTo.value = now.toISOString().split("T")[0];
-
-    // 4. Принудительно обновляем dropdown лейблы
-    document.querySelectorAll(".dropdown-menu").forEach(menu => {
-        updateDropdownLabel(menu);
-    });
-
-    // 5. Применяем фильтры
-    applyFilters();
-
-    // 6. Обновляем аналитику
-    const analyticsSection = document.getElementById("analyticsSection");
-    if (analyticsSection && !analyticsSection.classList.contains("collapsed")) {
-        renderAnalyticsCharts();
+    } catch {
+        branch.innerHTML = `<option value="">Ошибка загрузки</option>`;
+    } finally {
+        branch.disabled = false;
+        refreshCustomSelect("reqBranch");
     }
-
-    showToast("Фильтры сброшены");
-}
-function collectFilters() {
-    return {
-        orgs: checked(".filter-org"),
-        branches: checked(".filter-branch"),
-        products: checked(".filter-product"),
-        statuses: checked(".filter-status"),
-        startDate: document.getElementById("dateFrom").value,
-        endDate: document.getElementById("dateTo").value
-    };
 }
 
-function checked(selector) {
-    return [...document.querySelectorAll(selector + ":checked")].map(c => c.value);
+async function loadCreateUsers(orgId, branchId = null) {
+    const createdBy = document.getElementById("reqCreatedBy");
+
+    if (!createdBy || !window.canCreateForOthers) return;
+
+    createdBy.innerHTML = `<option value="">Загрузка...</option>`;
+    createdBy.disabled = true;
+
+    try {
+        let url = `?handler=ApiUsers&orgId=${encodeURIComponent(orgId)}`;
+
+        if (branchId) {
+            url += `&branchId=${encodeURIComponent(branchId)}`;
+        }
+
+        const result = await fetchJson(url);
+
+        createdBy.innerHTML = `<option value="">Выберите пользователя</option>`;
+
+        if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+            result.data.forEach(user => {
+                createdBy.add(new Option(user.fullName, user.id));
+            });
+        } else {
+            const option = new Option("Нет доступных пользователей", "");
+            option.disabled = true;
+            createdBy.add(option);
+        }
+    } catch {
+        createdBy.innerHTML = `<option value="">Ошибка загрузки</option>`;
+    } finally {
+        createdBy.disabled = false;
+        refreshCustomSelect("reqCreatedBy");
+    }
 }
 
-/* ============================================================
-   STATS UPDATE AFTER FILTERS
-============================================================ */
+function filterCreateProducts(orgId) {
+    const product = document.getElementById("reqProduct");
 
-function updateStatsByFilters() {
-    const rows = [...document.querySelectorAll("#requestsTable tbody tr")].filter(
-        r => r.style.display !== "none"
-    );
+    if (!product || !window.organizationProducts) return;
 
-    const total = document.getElementById("statTotal");
-    const created = document.getElementById("statCreated");
-    const inWork = document.getElementById("statInWork");
-    const done = document.getElementById("statDone");
-    const cancelled = document.getElementById("statCancelled");
+    const allowed = window.organizationProducts[String(orgId)] || window.organizationProducts[orgId] || [];
+    const allowedIds = new Set(allowed.map(Number));
 
-    if (total) total.textContent = rows.length;
-    if (created) created.textContent = rows.filter(r =>
-        r.children[7].textContent.includes("Создана")
-    ).length;
-    if (inWork) inWork.textContent = rows.filter(r =>
-        r.children[7].textContent.includes("В работе")
-    ).length;
-    if (done) done.textContent = rows.filter(r =>
-        r.children[7].textContent.includes("Завершена")
-    ).length;
-    if (cancelled) cancelled.textContent = rows.filter(r =>
-        r.children[7].textContent.includes("Отменена")
-    ).length;
+    let hasAvailable = false;
+
+    [...product.options].forEach(option => {
+        if (!option.value) return;
+
+        const available = allowedIds.size === 0 || allowedIds.has(Number(option.value));
+
+        option.hidden = !available;
+        option.disabled = !available;
+
+        if (available) {
+            hasAvailable = true;
+        }
+    });
+
+    product.value = "";
+
+    if (!hasAvailable) {
+        showToast("Для выбранной организации нет доступных продуктов");
+    }
+    refreshCustomSelect("reqProduct");
+}
+/* =========================
+   CUSTOM SELECTS IN MODAL
+========================= */
+
+const customSelectIds = [
+    "reqTopic",
+    "reqOrganization",
+    "reqBranch",
+    "reqProduct",
+    "reqPriority",
+    "reqCreatedBy"
+];
+
+function initCustomSelects() {
+    customSelectIds.forEach(id => {
+        const select = document.getElementById(id);
+
+        if (!select || select.type === "hidden") return;
+        if (select.dataset.customReady === "true") return;
+
+        buildCustomSelect(select);
+    });
+
+    document.addEventListener("click", e => {
+        if (!e.target.closest(".custom-select")) {
+            closeAllCustomSelects();
+        }
+    });
+
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape") {
+            closeAllCustomSelects();
+        }
+    });
 }
 
-/* ============================================================
-   ROW DOUBLE CLICK
-============================================================ */
+function buildCustomSelect(select) {
+    select.dataset.customReady = "true";
+    select.classList.add("native-select-hidden");
 
-function initRowClicks() {
-    document.querySelectorAll("#requestsTable tbody tr").forEach(row => {
-        row.addEventListener("dblclick", () => {
-            const id = row.dataset.requestId;
-            if (id) window.location.href = `/Requests/Details/${id}`;
+    const wrapper = document.createElement("div");
+    wrapper.className = "custom-select";
+    wrapper.dataset.selectId = select.id;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "custom-select-toggle";
+
+    const value = document.createElement("span");
+    value.className = "custom-select-value";
+
+    const arrow = document.createElement("span");
+    arrow.className = "custom-select-arrow";
+    arrow.textContent = "▾";
+
+    button.appendChild(value);
+    button.appendChild(arrow);
+
+    const menu = document.createElement("div");
+    menu.className = "custom-select-menu hidden";
+
+    wrapper.appendChild(button);
+    wrapper.appendChild(menu);
+
+    select.insertAdjacentElement("afterend", wrapper);
+
+    button.addEventListener("click", e => {
+        e.stopPropagation();
+
+        if (select.disabled) return;
+
+        const isOpen = !menu.classList.contains("hidden");
+
+        closeAllCustomSelects();
+
+        if (!isOpen) {
+            menu.classList.remove("hidden");
+            wrapper.classList.add("open");
+        }
+    });
+
+    select.addEventListener("change", () => {
+        refreshCustomSelect(select.id);
+    });
+
+    refreshCustomSelect(select.id);
+}
+
+function refreshCustomSelect(selectId) {
+    const select = document.getElementById(selectId);
+    const wrapper = document.querySelector(`.custom-select[data-select-id="${selectId}"]`);
+
+    if (!select || !wrapper) return;
+
+    const value = wrapper.querySelector(".custom-select-value");
+    const menu = wrapper.querySelector(".custom-select-menu");
+
+    if (!value || !menu) return;
+
+    const selectedOption = select.options[select.selectedIndex];
+
+    value.textContent = selectedOption?.textContent?.trim() || "Выберите значение";
+    value.classList.toggle("placeholder", !select.value);
+
+    wrapper.classList.toggle("disabled", select.disabled);
+
+    menu.innerHTML = "";
+
+    [...select.options].forEach(option => {
+        if (option.hidden) return;
+
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "custom-select-option";
+        item.textContent = option.textContent.trim();
+        item.dataset.value = option.value;
+
+        if (!option.value) {
+            item.classList.add("placeholder-option");
+        }
+
+        if (option.disabled) {
+            item.disabled = true;
+            item.classList.add("disabled");
+        }
+
+        if (option.value === select.value) {
+            item.classList.add("selected");
+        }
+
+        item.addEventListener("click", e => {
+            e.stopPropagation();
+
+            if (item.disabled) return;
+
+            select.value = option.value;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+
+            closeAllCustomSelects();
+            refreshCustomSelect(selectId);
         });
+
+        menu.appendChild(item);
     });
 }
 
-/* ============================================================
-   ANALYTICS
-============================================================ */
+function refreshAllCustomSelects() {
+    customSelectIds.forEach(id => refreshCustomSelect(id));
+}
 
-function initAnalyticsToggle() {
-    const btn = document.getElementById("toggleAnalyticsBtn");
-    const sec = document.getElementById("analyticsSection");
+function closeAllCustomSelects() {
+    document.querySelectorAll(".custom-select").forEach(wrapper => {
+        wrapper.classList.remove("open");
+    });
 
-    if (!btn || !sec) return;
+    document.querySelectorAll(".custom-select-menu").forEach(menu => {
+        menu.classList.add("hidden");
+    });
+}
+/* =========================
+   ESTIMATE MODEL IN MODAL
+========================= */
 
-    btn.addEventListener("click", () => {
-        const collapsed = sec.classList.toggle("collapsed");
-        btn.textContent = collapsed ? "Показать аналитику" : "Скрыть аналитику";
+function initEstimateEvents() {
+    const ids = [
+        "reqTopic",
+        "reqOrganization",
+        "reqBranch",
+        "reqProduct",
+        "reqPriority",
+        "reqDescription"
+    ];
 
-        if (!collapsed && !analyticsRendered) {
-            renderAnalyticsCharts();
-            analyticsRendered = true;
-        } else if (!collapsed) {
-            renderAnalyticsCharts();
-        }
+    ids.forEach(id => {
+        const element = document.getElementById(id);
+        if (!element) return;
+
+        const eventName = element.tagName === "TEXTAREA" ? "input" : "change";
+        element.addEventListener(eventName, scheduleEstimateUpdate);
     });
 }
 
-function renderAnalyticsCharts() {
-    const rows = [...document.querySelectorAll("#requestsTable tbody tr")]
-        .filter(r => r.style.display !== "none");
+function scheduleEstimateUpdate() {
+    clearTimeout(estimateTimer);
 
-    const statuses = {
-        Создана: 0,
-        "В работе": 0,
-        Завершена: 0,
-        Отменена: 0
-    };
+    estimateTimer = setTimeout(() => {
+        updateEstimate();
+    }, 350);
+}
 
-    const dates = {};
+async function updateEstimate() {
+    const topic = document.getElementById("reqTopic")?.value || "";
+    const organizationId = document.getElementById("reqOrganization")?.value || "";
+    const branchId = document.getElementById("reqBranch")?.value || "";
+    const productId = document.getElementById("reqProduct")?.value || "";
+    const priority = document.getElementById("reqPriority")?.value || "";
+    const description = document.getElementById("reqDescription")?.value || "";
 
-    rows.forEach(r => {
-        const s = r.children[7].textContent.trim();
-        if (statuses.hasOwnProperty(s)) {
-            statuses[s]++;
-        }
-        const d = r.children[r.children.length - 1].textContent.trim();
-        dates[d] = (dates[d] || 0) + 1;
+    const hasRequired = topic && organizationId && productId && priority;
+
+    if (!hasRequired) {
+        resetEstimateBox();
+        return;
+    }
+
+    setEstimateLoading();
+
+    if (estimateAbortController) {
+        estimateAbortController.abort();
+    }
+
+    estimateAbortController = new AbortController();
+
+    const params = new URLSearchParams({
+        topic,
+        organizationId,
+        productId,
+        priority,
+        description
     });
 
-    // Удаляем старые графики
-    const statusChartCtx = document.getElementById("chartStatus");
-    const datesChartCtx = document.getElementById("chartDates");
-
-    if (window.statusChartInstance) {
-        window.statusChartInstance.destroy();
-    }
-    if (window.datesChartInstance) {
-        window.datesChartInstance.destroy();
+    if (branchId) {
+        params.append("branchId", branchId);
     }
 
-    // Круговая диаграмма статусов
-    if (statusChartCtx) {
-        window.statusChartInstance = new Chart(statusChartCtx, {
-            type: "doughnut",
-            data: {
-                labels: Object.keys(statuses),
-                datasets: [{
-                    data: Object.values(statuses),
-                    backgroundColor: ['#60a5fa', '#facc15', '#22c55e', '#ef4444']
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: {
-                    legend: {
-                        position: 'bottom'
-                    }
-                }
+    try {
+        const response = await fetch(`?handler=ApiEstimateHours&${params.toString()}`, {
+            method: "GET",
+            signal: estimateAbortController.signal
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+            setEstimateError(result.error || "Не удалось рассчитать время");
+            return;
+        }
+
+        renderEstimate(result.data);
+    } catch (error) {
+        if (error.name === "AbortError") return;
+
+        setEstimateError("Ошибка расчёта времени");
+    }
+}
+
+function resetEstimateBox() {
+    const box = document.getElementById("estimateBox");
+    const value = document.getElementById("estimateHoursValue");
+    const quality = document.getElementById("estimateQuality");
+    const details = document.getElementById("estimateDetails");
+
+    if (!box || !value || !quality || !details) return;
+
+    box.className = "estimate-box estimate-empty";
+    value.textContent = "—";
+    quality.textContent = "Заполните тему, организацию, продукт и приоритет";
+    details.textContent = "Расчёт появится после выбора основных параметров заявки.";
+}
+
+function setEstimateLoading() {
+    const box = document.getElementById("estimateBox");
+    const value = document.getElementById("estimateHoursValue");
+    const quality = document.getElementById("estimateQuality");
+    const details = document.getElementById("estimateDetails");
+
+    if (!box || !value || !quality || !details) return;
+
+    box.className = "estimate-box estimate-loading";
+    value.textContent = "…";
+    quality.textContent = "Идёт расчёт";
+    details.textContent = "Сравниваю заявку с предыдущими обращениями.";
+}
+
+function setEstimateError(message) {
+    const box = document.getElementById("estimateBox");
+    const value = document.getElementById("estimateHoursValue");
+    const quality = document.getElementById("estimateQuality");
+    const details = document.getElementById("estimateDetails");
+
+    if (!box || !value || !quality || !details) return;
+
+    box.className = "estimate-box estimate-error";
+    value.textContent = "—";
+    quality.textContent = "Расчёт недоступен";
+    details.textContent = message;
+}
+
+function renderEstimate(data) {
+    const box = document.getElementById("estimateBox");
+    const value = document.getElementById("estimateHoursValue");
+    const quality = document.getElementById("estimateQuality");
+    const details = document.getElementById("estimateDetails");
+
+    if (!box || !value || !quality || !details) return;
+
+    const hours = Number(data.estimatedHours || 0);
+    const sampleCount = Number(data.sampleCount || 0);
+    const confidence = String(data.confidence || "low").toLowerCase();
+
+    box.className = `estimate-box estimate-${confidence}`;
+
+    value.textContent = `${formatNumber(hours)} ч.`;
+
+    if (confidence === "high") {
+        quality.textContent = "Высокая точность";
+    } else if (confidence === "medium") {
+        quality.textContent = "Средняя точность";
+    } else {
+        quality.textContent = "Ориентировочный расчёт";
+    }
+
+    const parts = [];
+
+    if (sampleCount > 0) {
+        parts.push(`Основано на ${sampleCount} похожих заявках.`);
+    } else {
+        parts.push("Похожих завершённых заявок мало, поэтому используется базовая оценка.");
+    }
+
+    if (data.priorityFactor) {
+        parts.push(`Коэффициент приоритета: ${formatNumber(data.priorityFactor)}.`);
+    }
+
+    if (data.descriptionFactor) {
+        parts.push(`Коэффициент описания: ${formatNumber(data.descriptionFactor)}.`);
+    }
+
+    details.textContent = parts.join(" ");
+}
+
+/* =========================
+   CREATE SUBMIT
+========================= */
+
+function initCreateRequestSubmit() {
+    const form = document.getElementById("createRequestForm");
+
+    if (!form) return;
+
+    form.addEventListener("submit", async e => {
+        e.preventDefault();
+
+        const title = document.getElementById("reqTitle")?.value.trim() || "";
+        const topic = document.getElementById("reqTopic")?.value || "";
+        const organizationId = document.getElementById("reqOrganization")?.value || "";
+        const branchId = document.getElementById("reqBranch")?.value || "";
+        const productId = document.getElementById("reqProduct")?.value || "";
+        const priority = document.getElementById("reqPriority")?.value || "";
+        const createdByRaw = document.getElementById("reqCreatedBy")?.value || "";
+        const description = document.getElementById("reqDescription")?.value.trim() || "";
+
+        if (!title) return showToastAndFocus("Введите заголовок", "reqTitle");
+        if (!topic) return showToastAndFocus("Выберите тему", "reqTopic");
+        if (!organizationId) return showToastAndFocus("Выберите организацию", "reqOrganization");
+        if (!productId) return showToastAndFocus("Выберите продукт", "reqProduct");
+        if (!priority) return showToastAndFocus("Выберите приоритет", "reqPriority");
+
+        let createdById = createdByRaw;
+
+        if (window.canCreateForOthers) {
+            if (!createdById) {
+                return showToastAndFocus("Выберите пользователя", "reqCreatedBy");
             }
-        });
-    }
+        } else {
+            createdById = window.currentUserId;
+        }
 
-    // Гистограмма по датам
-    if (datesChartCtx) {
-        window.datesChartInstance = new Chart(datesChartCtx, {
-            type: "bar",
-            data: {
-                labels: Object.keys(dates),
-                datasets: [{
-                    label: "Количество заявок",
-                    data: Object.values(dates),
-                    backgroundColor: '#3b82f6'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: { stepSize: 1 }
-                    },
-                    x: {
-                        ticks: {
-                            maxRotation: 45,
-                            minRotation: 0
-                        }
-                    }
-                }
+        const fd = new FormData();
+
+        const token = document.querySelector("#antiForgeryForm input[name='__RequestVerificationToken']");
+
+        if (token) {
+            fd.append("__RequestVerificationToken", token.value);
+        }
+
+        fd.append("Title", title);
+        fd.append("Topic", topic);
+        fd.append("OrganizationId", organizationId);
+        fd.append("BranchId", branchId);
+        fd.append("ProductId", productId);
+        fd.append("Priority", priority);
+        fd.append("CreatedById", createdById);
+        fd.append("Description", description);
+
+        const fileInput = document.getElementById("reqFile");
+
+        if (fileInput?.files?.length) {
+            [...fileInput.files].forEach(file => {
+                fd.append("Files", file);
+            });
+        }
+
+        const submitBtn = document.getElementById("createSubmitBtn") || form.querySelector('button[type="submit"]');
+        const originalText = submitBtn?.textContent || "Сохранить";
+
+        try {
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = "Сохранение...";
             }
-        });
-    }
+
+            const response = await fetch("?handler=Create", {
+                method: "POST",
+                body: fd
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showToast("Заявка создана");
+                closeCreateModal();
+
+                setTimeout(() => {
+                    location.reload();
+                }, 700);
+            } else {
+                showToast(result.error || result.details || "Ошибка создания заявки");
+            }
+        } catch (error) {
+            showToast("Ошибка соединения");
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+        }
+    });
 }
 
-/* ============================================================
-   TOAST
-============================================================ */
+/* =========================
+   HELPERS
+========================= */
 
-function showToast(msg) {
-    document.querySelectorAll('.toast').forEach(t => t.remove());
+async function fetchJson(url) {
+    const response = await fetch(url);
 
-    const div = document.createElement("div");
-    div.className = "toast";
-    div.textContent = msg;
-    document.body.append(div);
+    if (!response.ok) {
+        throw new Error("Network error");
+    }
+
+    return await response.json();
+}
+
+function parseRuDate(value) {
+    if (!value) return null;
+
+    const parts = value.split(".");
+    if (parts.length !== 3) return null;
+
+    const day = Number(parts[0]);
+    const month = Number(parts[1]) - 1;
+    const year = Number(parts[2]);
+
+    const date = new Date(year, month, day);
+    date.setHours(0, 0, 0, 0);
+
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    return date;
+}
+
+function toInputDate(date) {
+    return date.toISOString().split("T")[0];
+}
+
+function showToastAndFocus(message, elementId) {
+    showToast(message);
+    document.getElementById(elementId)?.focus();
+}
+
+function showToast(message) {
+    document.querySelectorAll(".toast").forEach(toast => toast.remove());
+
+    const toast = document.createElement("div");
+    toast.className = "toast";
+    toast.textContent = message;
+
+    document.body.appendChild(toast);
 
     setTimeout(() => {
-        div.style.opacity = "1";
-        div.style.transform = "translateY(0)";
+        toast.classList.add("visible");
     }, 10);
 
     setTimeout(() => {
-        div.style.opacity = "0";
-        div.style.transform = "translateY(20px)";
-        setTimeout(() => div.remove(), 300);
-    }, 3000);
+        toast.classList.remove("visible");
+
+        setTimeout(() => {
+            toast.remove();
+        }, 250);
+    }, 2600);
 }
 
-// Добавляем стили для анимации тоста
-const toastStyles = document.createElement('style');
-toastStyles.textContent = `
-    .toast {
-        position: fixed;
-        bottom: 25px;
-        right: 25px;
-        background: #2563eb;
-        color: white;
-        padding: 12px 18px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-        opacity: 0;
-        transform: translateY(20px);
-        transition: opacity 0.3s, transform 0.3s;
-        font-size: 14px;
-        z-index: 10000;
-        max-width: 300px;
-        word-wrap: break-word;
-    }
-`;
-document.head.appendChild(toastStyles);
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+function formatHours(value) {
+    const num = Number(value || 0);
+    return `${formatNumber(num)} ч.`;
+}
+
+function formatNumber(value) {
+    const num = Number(value || 0);
+
+    return num
+        .toFixed(2)
+        .replace(".", ",");
+}
