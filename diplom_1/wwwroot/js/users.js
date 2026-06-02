@@ -1838,16 +1838,13 @@ function generatePassword(length = 10) {
     return password;
 }
 
-function showToast(message) {
-    const toast = document.createElement("div");
-    toast.className = "toast";
-    toast.textContent = message;
-    document.body.appendChild(toast);
+function showToast(message, type = "success") {
+    if (window.showAppToast) {
+        window.showAppToast(message, type);
+        return;
+    }
 
-    setTimeout(() => {
-        toast.classList.add("fade-out");
-        setTimeout(() => toast.remove(), 300);
-    }, 2500);
+    alert(message);
 }
 
 function escapeHtml(value) {

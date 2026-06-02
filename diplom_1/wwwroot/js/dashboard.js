@@ -8,11 +8,22 @@
     const notification = document.getElementById("notification");
 
     function showNotification(message, isSuccess = true) {
+        if (window.showAppToast) {
+            window.showAppToast(message, isSuccess ? "success" : "error");
+            return;
+        }
+
+        if (!notification) {
+            alert(message);
+            return;
+        }
+
         notification.textContent = message;
-        notification.className = `notification ${isSuccess ? 'success' : 'error'}`;
-        notification.style.display = 'block';
+        notification.className = `notification ${isSuccess ? "success" : "error"}`;
+        notification.style.display = "block";
+
         setTimeout(() => {
-            notification.style.display = 'none';
+            notification.style.display = "none";
         }, 3000);
     }
 

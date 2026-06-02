@@ -3,6 +3,7 @@
 let activeEdit = null;
 
 document.addEventListener("DOMContentLoaded", () => {
+    initPageAlertsAsToasts();
     initFieldEditing();
     initEditModal();
     initCommentFiles();
@@ -1290,7 +1291,23 @@ function getCurrentUserId() {
 
     return "";
 }
+function initPageAlertsAsToasts() {
+    document.querySelectorAll(".page-alert").forEach(alert => {
+        const message = alert.textContent.trim();
 
+        if (!message) {
+            alert.remove();
+            return;
+        }
+
+        const type = alert.classList.contains("page-alert-error")
+            ? "error"
+            : "success";
+
+        showToast(message, type);
+        alert.remove();
+    });
+}
 function getAntiForgeryToken() {
     return document.querySelector("#antiForgeryForm input[name='__RequestVerificationToken']")?.value || "";
 }
@@ -1390,24 +1407,11 @@ function escapeHtml(value) {
         .replaceAll("'", "&#039;");
 }
 
-function showToast(message) {
-    document.querySelectorAll(".toast").forEach(item => item.remove());
+function showToast(message, type = "success") {
+    if (window.showAppToast) {
+        window.showAppToast(message, type);
+        return;
+    }
 
-    const toast = document.createElement("div");
-    toast.className = "toast";
-    toast.textContent = message;
-
-    document.body.appendChild(toast);
-
-    requestAnimationFrame(() => {
-        toast.classList.add("visible");
-    });
-
-    setTimeout(() => {
-        toast.classList.remove("visible");
-
-        setTimeout(() => {
-            toast.remove();
-        }, 250);
-    }, 2600);
+    alert(message);
 }

@@ -13,6 +13,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initSearch();
     initRowClicks();
     initAnalyticsToggle();
+    initReportExport();
 
     initCreateRequestModal();
     initCreateRequestSubmit();
@@ -991,7 +992,744 @@ function updateHoursTable() {
 
     container.innerHTML = html;
 }
+/* =========================
+   REPORT EXPORT
+========================= */
 
+function initReportExport() {
+    const btn = document.getElementById("exportReportBtn");
+
+    if (!btn) {
+        return;
+    }
+
+    btn.addEventListener("click", () => {
+        const rows = getVisibleRows();
+
+        if (rows.length === 0) {
+            showToast("Нет данных для отчёта");
+            return;
+        }
+
+        openRequestsReport(rows);
+    });
+}
+
+function openRequestsReport(rows) {
+    const reportData = buildRequestsReportData(rows);
+    const reportWindow = window.open("", "_blank");
+
+    if (!reportWindow) {
+        showToast("Браузер заблокировал открытие отчёта");
+        return;
+    }
+
+    reportWindow.document.open();
+    reportWindow.document.write(buildRequestsReportHtml(reportData));
+    reportWindow.document.close();
+
+    reportWindow.onload = () => {
+        reportWindow.focus();
+    };
+}
+
+function buildRequestsReportData(rows) {
+    const items = rows.map(row => getRowData(row));
+
+    const total = items.length;
+    const statuses = countBy(items, item => item.status || "Не указан");
+    const priorities = countBy(items, item => item.priority || "Не указан");
+    const organizations = countBy(items, item => item.org || "Не указана");
+    const topics = countBy(items, item => item.topic || "Не указана");
+    const products = countBy(items, item => item.product || "Не указан");
+
+    const totalHours = items.reduce((sum, item) => sum + Number(item.hours || 0), 0);
+    const completed = statuses["Завершена"] || 0;
+    const cancelled = statuses["Отменена"] || 0;
+    const active = (statuses["Создана"] || 0) + (statuses["В работе"] || 0);
+
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const cancelRate = total > 0 ? Math.round((cancelled / total) * 100) : 0;
+
+    const monthly = buildMonthlyReportStats(items);
+    const orgHours = buildOrganizationHoursReportStats(items);
+
+    return {
+        generatedAt: new Date(),
+        periodText: getReportPeriodText(),
+        filtersText: getReportFiltersText(),
+        items,
+        total,
+        totalHours,
+        active,
+        completed,
+        cancelled,
+        completionRate,
+        cancelRate,
+        statuses,
+        priorities,
+        organizations,
+        topics,
+        products,
+        monthly,
+        orgHours
+    };
+}
+
+function buildRequestsReportHtml(data) {
+    const topOrganizations = toSortedEntries(data.organizations).slice(0, 8);
+    const topTopics = toSortedEntries(data.topics).slice(0, 8);
+    const topProducts = toSortedEntries(data.products).slice(0, 8);
+    const statusEntries = toSortedEntries(data.statuses);
+    const priorityEntries = toSortedEntries(data.priorities);
+
+    return `
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <title>Отчёт по заявкам</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #f8fafc;
+            color: #0f172a;
+            font-family: "Segoe UI", Arial, sans-serif;
+            font-size: 13px;
+        }
+
+        .report-page {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            align-items: flex-start;
+            margin-bottom: 18px;
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+            border-radius: 18px;
+            background: #ffffff;
+        }
+
+        .report-title {
+            margin: 0 0 8px;
+            font-size: 24px;
+            line-height: 1.15;
+            letter-spacing: -0.03em;
+        }
+
+        .report-meta {
+            color: #64748b;
+            line-height: 1.5;
+        }
+
+        .report-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .report-btn {
+            border: 1px solid #2563eb;
+            border-radius: 10px;
+            background: #2563eb;
+            color: #ffffff;
+            padding: 9px 14px;
+            font-weight: 650;
+            cursor: pointer;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .summary-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 15px;
+            background: #ffffff;
+            padding: 14px;
+        }
+
+        .summary-value {
+            font-size: 25px;
+            font-weight: 750;
+            line-height: 1;
+            letter-spacing: -0.04em;
+        }
+
+        .summary-label {
+            margin-top: 7px;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .report-grid {
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 16px;
+        }
+
+        .report-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            background: #ffffff;
+            padding: 16px;
+            break-inside: avoid;
+        }
+
+        .span-12 { grid-column: span 12; }
+        .span-8 { grid-column: span 8; }
+        .span-6 { grid-column: span 6; }
+        .span-4 { grid-column: span 4; }
+
+        .report-card h2 {
+            margin: 0 0 12px;
+            font-size: 15px;
+            color: #334155;
+        }
+
+        .bar-list {
+            display: grid;
+            gap: 9px;
+        }
+
+        .bar-row {
+            display: grid;
+            grid-template-columns: minmax(120px, 1fr) 3fr 44px;
+            gap: 9px;
+            align-items: center;
+        }
+
+        .bar-label {
+            overflow: hidden;
+            color: #475569;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .bar-track {
+            height: 9px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: #e2e8f0;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: #2563eb;
+        }
+
+        .bar-value {
+            text-align: right;
+            color: #0f172a;
+            font-weight: 700;
+        }
+
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .report-table th,
+        .report-table td {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 8px 9px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .report-table th {
+            background: #f8fafc;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 750;
+        }
+
+        .report-table td {
+            color: #334155;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            border-radius: 999px;
+            background: #eff6ff;
+            padding: 4px 8px;
+            color: #1d4ed8;
+            font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .insight-list {
+            display: grid;
+            gap: 8px;
+            margin: 0;
+            padding-left: 18px;
+            color: #334155;
+            line-height: 1.45;
+        }
+
+        .muted {
+            color: #64748b;
+        }
+
+        @media print {
+            body {
+                background: #ffffff;
+            }
+
+            .report-page {
+                max-width: none;
+                padding: 0;
+            }
+
+            .report-actions {
+                display: none;
+            }
+
+            .report-card,
+            .summary-card,
+            .report-header {
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-page">
+        <header class="report-header">
+            <div>
+                <h1 class="report-title">Статистический отчёт по заявкам</h1>
+                <div class="report-meta">
+                    <div><strong>Период:</strong> ${escapeHtml(data.periodText)}</div>
+                    <div><strong>Фильтры:</strong> ${escapeHtml(data.filtersText)}</div>
+                    <div><strong>Сформирован:</strong> ${escapeHtml(formatDateTime(data.generatedAt))}</div>
+                </div>
+            </div>
+
+            <div class="report-actions">
+                <button class="report-btn" onclick="window.print()">Печать / PDF</button>
+            </div>
+        </header>
+
+        <section class="summary-grid">
+            ${summaryCard("Всего заявок", data.total)}
+            ${summaryCard("Активные", data.active)}
+            ${summaryCard("Завершены", data.completed)}
+            ${summaryCard("Отменены", data.cancelled)}
+            ${summaryCard("Завершение", `${data.completionRate}%`)}
+            ${summaryCard("Трудозатраты", formatHours(data.totalHours))}
+        </section>
+
+        <section class="report-grid">
+            <div class="report-card span-8">
+                <h2>Динамика заявок по месяцам</h2>
+                ${renderMonthlyChart(data.monthly)}
+            </div>
+
+            <div class="report-card span-4">
+                <h2>Распределение по статусам</h2>
+                ${renderBarList(statusEntries, data.total)}
+            </div>
+
+            <div class="report-card span-6">
+                <h2>Топ организаций по количеству заявок</h2>
+                ${renderBarList(topOrganizations, data.total)}
+            </div>
+
+            <div class="report-card span-6">
+                <h2>Топ тем обращений</h2>
+                ${renderBarList(topTopics, data.total)}
+            </div>
+
+            <div class="report-card span-6">
+                <h2>Распределение по приоритетам</h2>
+                ${renderBarList(priorityEntries, data.total)}
+            </div>
+
+            <div class="report-card span-6">
+                <h2>Топ продуктов</h2>
+                ${renderBarList(topProducts, data.total)}
+            </div>
+
+            <div class="report-card span-12">
+                <h2>Контроль лимита часов по организациям</h2>
+                ${renderOrgHoursTable(data.orgHours)}
+            </div>
+
+            <div class="report-card span-12">
+                <h2>Краткие выводы</h2>
+                ${renderInsights(data, topOrganizations, topTopics)}
+            </div>
+
+            <div class="report-card span-12">
+                <h2>Реестр заявок, попавших в отчёт</h2>
+                ${renderRequestsReportTable(data.items)}
+            </div>
+        </section>
+    </div>
+</body>
+</html>
+    `;
+}
+
+function summaryCard(label, value) {
+    return `
+        <div class="summary-card">
+            <div class="summary-value">${escapeHtml(value)}</div>
+            <div class="summary-label">${escapeHtml(label)}</div>
+        </div>
+    `;
+}
+
+function renderBarList(entries, total) {
+    if (!entries.length) {
+        return `<div class="muted">Нет данных</div>`;
+    }
+
+    const max = Math.max(...entries.map(x => x[1]), 1);
+
+    return `
+        <div class="bar-list">
+            ${entries.map(([label, value]) => {
+        const width = Math.round((value / max) * 100);
+        const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+
+        return `
+                    <div class="bar-row">
+                        <div class="bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width:${width}%"></div>
+                        </div>
+                        <div class="bar-value">${value} / ${percent}%</div>
+                    </div>
+                `;
+    }).join("")}
+        </div>
+    `;
+}
+
+function renderMonthlyChart(monthly) {
+    if (!monthly.length) {
+        return `<div class="muted">Нет данных для построения динамики</div>`;
+    }
+
+    const max = Math.max(
+        ...monthly.map(item => Math.max(item.created, item.finished, item.cancelled)),
+        1
+    );
+
+    return `
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>Месяц</th>
+                    <th>Создано</th>
+                    <th>Завершено</th>
+                    <th>Отменено</th>
+                    <th>Визуально</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${monthly.map(item => `
+                    <tr>
+                        <td>${escapeHtml(item.label)}</td>
+                        <td>${item.created}</td>
+                        <td>${item.finished}</td>
+                        <td>${item.cancelled}</td>
+                        <td>
+                            <div class="bar-track" title="Создано">
+                                <div class="bar-fill" style="width:${Math.round((item.created / max) * 100)}%"></div>
+                            </div>
+                        </td>
+                    </tr>
+                `).join("")}
+            </tbody>
+        </table>
+    `;
+}
+
+function renderOrgHoursTable(orgHours) {
+    if (!orgHours.length) {
+        return `<div class="muted">Нет данных по лимитам часов</div>`;
+    }
+
+    return `
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>Организация</th>
+                    <th>Заявок</th>
+                    <th>Лимит</th>
+                    <th>Потрачено</th>
+                    <th>Остаток</th>
+                    <th>Использование</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${orgHours.map(item => {
+        const percent = item.limit > 0 ? Math.min(Math.round((item.spent / item.limit) * 100), 100) : 0;
+        const remaining = Math.max(item.limit - item.spent, 0);
+
+        return `
+                        <tr>
+                            <td>${escapeHtml(item.org)}</td>
+                            <td>${item.count}</td>
+                            <td>${formatHours(item.limit)}</td>
+                            <td>${formatHours(item.spent)}</td>
+                            <td>${formatHours(remaining)}</td>
+                            <td>
+                                <div class="bar-track">
+                                    <div class="bar-fill" style="width:${percent}%"></div>
+                                </div>
+                                <div class="muted">${percent}%</div>
+                            </td>
+                        </tr>
+                    `;
+    }).join("")}
+            </tbody>
+        </table>
+    `;
+}
+
+function renderInsights(data, topOrganizations, topTopics) {
+    const topOrg = topOrganizations[0];
+    const topTopic = topTopics[0];
+
+    return `
+        <ul class="insight-list">
+            <li>За выбранный период в отчёт попало <strong>${data.total}</strong> заявок.</li>
+            <li>Доля завершённых заявок составляет <strong>${data.completionRate}%</strong>, доля отменённых — <strong>${data.cancelRate}%</strong>.</li>
+            <li>Суммарные учтённые трудозатраты составляют <strong>${formatHours(data.totalHours)}</strong>.</li>
+            ${topOrg
+            ? `<li>Наибольшее количество заявок у организации <strong>${escapeHtml(topOrg[0])}</strong>: ${topOrg[1]}.</li>`
+            : ""
+        }
+            ${topTopic
+            ? `<li>Самая частая тема обращений: <strong>${escapeHtml(topTopic[0])}</strong> — ${topTopic[1]}.</li>`
+            : ""
+        }
+        </ul>
+    `;
+}
+
+function renderRequestsReportTable(items) {
+    return `
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>Дата</th>
+                    <th>Заголовок</th>
+                    <th>Тема</th>
+                    <th>Организация</th>
+                    <th>Филиал</th>
+                    <th>Продукт</th>
+                    <th>Приоритет</th>
+                    <th>Статус</th>
+                    <th>Часы</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${items.map(item => `
+                    <tr>
+                        <td>${escapeHtml(item.date || "-")}</td>
+                        <td>${escapeHtml(item.title || "-")}</td>
+                        <td>${escapeHtml(item.topic || "-")}</td>
+                        <td>${escapeHtml(item.org || "-")}</td>
+                        <td>${escapeHtml(item.branch || "-")}</td>
+                        <td>${escapeHtml(item.product || "-")}</td>
+                        <td>${escapeHtml(item.priority || "-")}</td>
+                        <td><span class="status-pill">${escapeHtml(item.status || "-")}</span></td>
+                        <td>${formatHours(item.hours || 0)}</td>
+                    </tr>
+                `).join("")}
+            </tbody>
+        </table>
+    `;
+}
+
+function buildMonthlyReportStats(items) {
+    const months = {};
+    const monthNames = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
+
+    items.forEach(item => {
+        const date = parseRuDate(item.date);
+
+        if (!date) {
+            return;
+        }
+
+        const monthNumber = String(date.getMonth() + 1).padStart(2, "0");
+        const key = `${date.getFullYear()}-${monthNumber}`;
+
+        if (!months[key]) {
+            months[key] = {
+                label: `${monthNames[date.getMonth()]} ${date.getFullYear()}`,
+                created: 0,
+                finished: 0,
+                cancelled: 0
+            };
+        }
+
+        months[key].created++;
+
+        if (item.status === "Завершена") {
+            months[key].finished++;
+        }
+
+        if (item.status === "Отменена") {
+            months[key].cancelled++;
+        }
+    });
+
+    return Object.keys(months)
+        .sort()
+        .map(key => months[key]);
+}
+
+function buildOrganizationHoursReportStats(items) {
+    const stats = {};
+
+    items.forEach(item => {
+        if (!item.org || item.org === "-") {
+            return;
+        }
+
+        if (!stats[item.org]) {
+            stats[item.org] = {
+                org: item.org,
+                count: 0,
+                spent: 0,
+                limit: 0
+            };
+        }
+
+        stats[item.org].count++;
+        stats[item.org].spent += Number(item.hours || 0);
+    });
+
+    (window.organizationHours || []).forEach(item => {
+        const name = item.orgName ?? item.OrgName;
+        const limit = Number(item.limitHours ?? item.LimitHours ?? 0);
+
+        if (!name) {
+            return;
+        }
+
+        if (!stats[name]) {
+            stats[name] = {
+                org: name,
+                count: 0,
+                spent: 0,
+                limit
+            };
+        } else {
+            stats[name].limit = limit;
+        }
+    });
+
+    return Object.values(stats)
+        .sort((a, b) => b.spent - a.spent);
+}
+
+function countBy(items, selector) {
+    return items.reduce((result, item) => {
+        const key = selector(item) || "Не указано";
+        result[key] = (result[key] || 0) + 1;
+        return result;
+    }, {});
+}
+
+function toSortedEntries(object) {
+    return Object.entries(object)
+        .sort((a, b) => b[1] - a[1]);
+}
+
+function getReportPeriodText() {
+    const from = document.getElementById("dateFrom")?.value || "";
+    const to = document.getElementById("dateTo")?.value || "";
+
+    if (!from && !to) {
+        return "Период не ограничен";
+    }
+
+    if (from && to) {
+        return `${formatInputDate(from)} — ${formatInputDate(to)}`;
+    }
+
+    if (from) {
+        return `с ${formatInputDate(from)}`;
+    }
+
+    return `по ${formatInputDate(to)}`;
+}
+
+function getReportFiltersText() {
+    const parts = [];
+
+    addReportFilterPart(parts, "Организации", ".filter-org");
+    addReportFilterPart(parts, "Филиалы", ".filter-branch");
+    addReportFilterPart(parts, "Продукты", ".filter-product");
+    addReportFilterPart(parts, "Статусы", ".filter-status");
+    addReportFilterPart(parts, "Клиенты", ".filter-client");
+
+    const search = document.getElementById("searchInput")?.value?.trim();
+
+    if (search) {
+        parts.push(`Поиск: ${search}`);
+    }
+
+    return parts.length ? parts.join("; ") : "Без дополнительных фильтров";
+}
+
+function addReportFilterPart(parts, label, selector) {
+    const values = [...document.querySelectorAll(`${selector}:checked`)]
+        .filter(cb => cb.value !== "all" && !cb.disabled)
+        .map(cb => cb.parentElement.textContent.trim());
+
+    if (values.length > 0) {
+        parts.push(`${label}: ${values.join(", ")}`);
+    }
+}
+
+function formatInputDate(value) {
+    if (!value) {
+        return "";
+    }
+
+    const parts = value.split("-");
+
+    if (parts.length !== 3) {
+        return value;
+    }
+
+    return `${parts[2]}.${parts[1]}.${parts[0]}`;
+}
+
+function formatDateTime(date) {
+    return date.toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+}
 /* =========================
    CREATE MODAL
 ========================= */
@@ -1723,7 +2461,7 @@ function formatHours(value) {
 }
 
 function showToastAndFocus(message, elementId) {
-    showToast(message);
+    showToast(message, "warning");
 
     const element = document.getElementById(elementId);
 
@@ -1743,26 +2481,13 @@ function showToastAndFocus(message, elementId) {
     }
 }
 
-function showToast(message) {
-    let toast = document.getElementById("toast");
-
-    if (!toast) {
-        toast = document.createElement("div");
-        toast.id = "toast";
-        toast.className = "toast";
-        document.body.appendChild(toast);
+function showToast(message, type = "success") {
+    if (window.showAppToast) {
+        window.showAppToast(message, type);
+        return;
     }
 
-    toast.textContent = message;
-    toast.classList.remove("fade-out");
-    toast.classList.add("visible");
-
-    clearTimeout(toast._timer);
-
-    toast._timer = setTimeout(() => {
-        toast.classList.add("fade-out");
-        toast.classList.remove("visible");
-    }, 2600);
+    alert(message);
 }
 
 function escapeHtml(value) {

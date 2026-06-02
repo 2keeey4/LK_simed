@@ -167,23 +167,42 @@ body {
 
 /* Сообщения - ПО ЦЕНТРУ */
 .message-container {
-    margin-top: 20px;
+    margin-top: 18px;
     width: 100%;
-    text-align: center;
 }
 
-.error-message {
-    color: #780000;
-    font-size: 14px;
-    text-align: center;
-    margin: 0;
-    padding: 0;
-}
+    .message-container .error-message,
+    .message-container .success-message {
+        margin: 0;
+        padding: 12px 14px;
+        border-radius: 14px;
+        font-size: 13px;
+        line-height: 1.4;
+        font-weight: 600;
+        text-align: left;
+    }
 
-.success-message {
-    color: #155724;
-    font-size: 14px;
-    text-align: center;
-    margin: 0;
+    .message-container .error-message {
+        border: 1px solid #fecaca;
+        background: #fef2f2;
+        color: #991b1b;
+    }
+
+    .message-container .success-message {
+        border: 1px solid #bbf7d0;
+        background: #f0fdf4;
+        color: #166534;
+    }
+
+.form-group > .error-message {
+    display: block;
+    margin-top: 7px;
     padding: 0;
+    border: none;
+    background: transparent;
+    color: #991b1b;
+    font-size: 12px;
+    line-height: 1.35;
+    text-align: left;
+    font-weight: 600;
 }

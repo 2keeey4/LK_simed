@@ -1169,6 +1169,12 @@
         transform: translateY(12px);
     }
 
+.analytics-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 9px;
+    flex-wrap: wrap;
+}
 /* =========================
    RESPONSIVE
 ========================= */
@@ -1372,4 +1378,16 @@
         bottom: 12px;
         max-width: calc(100vw - 24px);
     }
+}
+
+
+@media (max-width: 820px) {
+    .analytics-actions {
+        width: 100%;
+        flex-direction: column;
+    }
+
+        .analytics-actions button {
+            width: 100%;
+        }
 }
