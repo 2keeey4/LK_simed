@@ -428,6 +428,7 @@ function clearFilters() {
     document.querySelectorAll(".dropdown-menu").forEach(menu => updateDropdownLabel(menu));
 
     const statusToggle = document.getElementById("statusFilterToggle");
+
     if (statusToggle) {
         statusToggle.textContent = "Создана, В работе";
         statusToggle.classList.add("has-filter");
@@ -531,7 +532,9 @@ function initAnalyticsToggle() {
 
     btn.addEventListener("click", () => {
         const collapsed = section.classList.toggle("collapsed");
-        btn.textContent = collapsed ? "Показать аналитику" : "Скрыть аналитику";
+        btn.textContent = collapsed
+            ? "Показать сводку по заявкам"
+            : "Скрыть сводку по заявкам";
 
         if (!collapsed) {
             setTimeout(updateAllAnalytics, 120);
@@ -988,6 +991,7 @@ function updateHoursTable() {
 
     container.innerHTML = html;
 }
+
 /* =========================
    CREATE MODAL
 ========================= */
@@ -1064,11 +1068,12 @@ function resetCreateDependentFields() {
     if (createdBy && window.canCreateForOthers) {
         createdBy.innerHTML = `<option value="">Выберите пользователя</option>`;
     }
+
     refreshAllCustomSelects();
 }
 
 /* =========================
-   CREATE CASCADE
+CREATE CASCADE
 ========================= */
 
 function initCreateOrgBranch() {
@@ -1196,8 +1201,10 @@ function filterCreateProducts(orgId) {
     if (!hasAvailable) {
         showToast("Для выбранной организации нет доступных продуктов");
     }
+
     refreshCustomSelect("reqProduct");
 }
+
 /* =========================
    CUSTOM SELECTS IN MODAL
 ========================= */
@@ -1357,6 +1364,7 @@ function closeAllCustomSelects() {
         menu.classList.add("hidden");
     });
 }
+
 /* =========================
    ESTIMATE MODEL IN MODAL
 ========================= */
@@ -1412,10 +1420,10 @@ async function updateEstimate() {
     estimateAbortController = new AbortController();
 
     const params = new URLSearchParams({
-        topic,
+        requestTopicId: topic,
         organizationId,
         productId,
-        priority,
+        requestPriorityId: priority,
         description
     });
 
@@ -1471,7 +1479,6 @@ function setEstimateLoading() {
     quality.textContent = "Идёт расчёт";
     details.textContent = "Сравниваю заявку с предыдущими обращениями.";
 }
-
 function setEstimateError(message) {
     const box = document.getElementById("estimateBox");
     const value = document.getElementById("estimateHoursValue");
@@ -1482,8 +1489,8 @@ function setEstimateError(message) {
 
     box.className = "estimate-box estimate-error";
     value.textContent = "—";
-    quality.textContent = "Расчёт недоступен";
-    details.textContent = message;
+    quality.textContent = "Ошибка расчёта";
+    details.textContent = message || "Не удалось рассчитать прогнозное время.";
 }
 
 function renderEstimate(data) {
@@ -1496,41 +1503,32 @@ function renderEstimate(data) {
 
     const hours = Number(data.estimatedHours || 0);
     const sampleCount = Number(data.sampleCount || 0);
-    const confidence = String(data.confidence || "low").toLowerCase();
+    const confidence = data.confidence || "low";
 
-    box.className = `estimate-box estimate-${confidence}`;
-
-    value.textContent = `${formatNumber(hours)} ч.`;
+    let className = "estimate-box estimate-low";
+    let qualityText = "Низкая точность";
 
     if (confidence === "high") {
-        quality.textContent = "Высокая точность";
+        className = "estimate-box estimate-high";
+        qualityText = "Высокая точность";
     } else if (confidence === "medium") {
-        quality.textContent = "Средняя точность";
-    } else {
-        quality.textContent = "Ориентировочный расчёт";
+        className = "estimate-box estimate-medium";
+        qualityText = "Средняя точность";
     }
 
-    const parts = [];
+    box.className = className;
+    value.textContent = `${formatHours(hours)}`;
+    quality.textContent = qualityText;
 
     if (sampleCount > 0) {
-        parts.push(`Основано на ${sampleCount} похожих заявках.`);
+        details.textContent = `Расчёт выполнен на основе ${sampleCount} похожих завершённых заявок.`;
     } else {
-        parts.push("Похожих завершённых заявок мало, поэтому используется базовая оценка.");
+        details.textContent = "Расчёт выполнен по базовой оценке темы и приоритета.";
     }
-
-    if (data.priorityFactor) {
-        parts.push(`Коэффициент приоритета: ${formatNumber(data.priorityFactor)}.`);
-    }
-
-    if (data.descriptionFactor) {
-        parts.push(`Коэффициент описания: ${formatNumber(data.descriptionFactor)}.`);
-    }
-
-    details.textContent = parts.join(" ");
 }
 
 /* =========================
-   CREATE SUBMIT
+   CREATE REQUEST SUBMIT
 ========================= */
 
 function initCreateRequestSubmit() {
@@ -1542,19 +1540,36 @@ function initCreateRequestSubmit() {
         e.preventDefault();
 
         const title = document.getElementById("reqTitle")?.value.trim() || "";
-        const topic = document.getElementById("reqTopic")?.value || "";
+
+        const topicId = document.getElementById("reqTopic")?.value || "";
+
         const organizationId = document.getElementById("reqOrganization")?.value || "";
         const branchId = document.getElementById("reqBranch")?.value || "";
         const productId = document.getElementById("reqProduct")?.value || "";
-        const priority = document.getElementById("reqPriority")?.value || "";
+
+        const priorityId = document.getElementById("reqPriority")?.value || "";
         const createdByRaw = document.getElementById("reqCreatedBy")?.value || "";
         const description = document.getElementById("reqDescription")?.value.trim() || "";
 
-        if (!title) return showToastAndFocus("Введите заголовок", "reqTitle");
-        if (!topic) return showToastAndFocus("Выберите тему", "reqTopic");
-        if (!organizationId) return showToastAndFocus("Выберите организацию", "reqOrganization");
-        if (!productId) return showToastAndFocus("Выберите продукт", "reqProduct");
-        if (!priority) return showToastAndFocus("Выберите приоритет", "reqPriority");
+        if (!title) {
+            return showToastAndFocus("Введите заголовок", "reqTitle");
+        }
+
+        if (!topicId) {
+            return showToastAndFocus("Выберите тему", "reqTopic");
+        }
+
+        if (!organizationId) {
+            return showToastAndFocus("Выберите организацию", "reqOrganization");
+        }
+
+        if (!productId) {
+            return showToastAndFocus("Выберите продукт", "reqProduct");
+        }
+
+        if (!priorityId) {
+            return showToastAndFocus("Выберите приоритет", "reqPriority");
+        }
 
         let createdById = createdByRaw;
 
@@ -1575,11 +1590,11 @@ function initCreateRequestSubmit() {
         }
 
         fd.append("Title", title);
-        fd.append("Topic", topic);
+        fd.append("RequestTopicId", topicId);
         fd.append("OrganizationId", organizationId);
         fd.append("BranchId", branchId);
         fd.append("ProductId", productId);
-        fd.append("Priority", priority);
+        fd.append("RequestPriorityId", priorityId);
         fd.append("CreatedById", createdById);
         fd.append("Description", description);
 
@@ -1632,11 +1647,28 @@ function initCreateRequestSubmit() {
    HELPERS
 ========================= */
 
+function getSelectedOptionDataId(selectId) {
+    const select = document.getElementById(selectId);
+
+    if (!select) {
+        return "";
+    }
+
+    const option = select.options[select.selectedIndex];
+
+    return option?.dataset?.id || "";
+}
+
 async function fetchJson(url) {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+        method: "GET",
+        headers: {
+            "Accept": "application/json"
+        }
+    });
 
     if (!response.ok) {
-        throw new Error("Network error");
+        throw new Error(`HTTP ${response.status}`);
     }
 
     return await response.json();
@@ -1646,14 +1678,20 @@ function parseRuDate(value) {
     if (!value) return null;
 
     const parts = value.split(".");
-    if (parts.length !== 3) return null;
+
+    if (parts.length !== 3) {
+        return null;
+    }
 
     const day = Number(parts[0]);
     const month = Number(parts[1]) - 1;
     const year = Number(parts[2]);
 
+    if (!day || month < 0 || !year) {
+        return null;
+    }
+
     const date = new Date(year, month, day);
-    date.setHours(0, 0, 0, 0);
 
     if (Number.isNaN(date.getTime())) {
         return null;
@@ -1663,33 +1701,67 @@ function parseRuDate(value) {
 }
 
 function toInputDate(date) {
-    return date.toISOString().split("T")[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+}
+
+function formatHours(value) {
+    const number = Number(value || 0);
+
+    if (number === 0) {
+        return "0 ч";
+    }
+
+    if (number < 1) {
+        return `${Math.round(number * 60)} мин`;
+    }
+
+    return `${number.toFixed(1).replace(".", ",")} ч`;
 }
 
 function showToastAndFocus(message, elementId) {
     showToast(message);
-    document.getElementById(elementId)?.focus();
+
+    const element = document.getElementById(elementId);
+
+    if (element) {
+        element.focus();
+
+        const wrapper = document.querySelector(`.custom-select[data-select-id="${elementId}"]`);
+
+        if (wrapper) {
+            wrapper.classList.add("open");
+
+            const menu = wrapper.querySelector(".custom-select-menu");
+            if (menu) {
+                menu.classList.remove("hidden");
+            }
+        }
+    }
 }
 
 function showToast(message) {
-    document.querySelectorAll(".toast").forEach(toast => toast.remove());
+    let toast = document.getElementById("toast");
 
-    const toast = document.createElement("div");
-    toast.className = "toast";
+    if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "toast";
+        toast.className = "toast";
+        document.body.appendChild(toast);
+    }
+
     toast.textContent = message;
+    toast.classList.remove("fade-out");
+    toast.classList.add("visible");
 
-    document.body.appendChild(toast);
+    clearTimeout(toast._timer);
 
-    setTimeout(() => {
-        toast.classList.add("visible");
-    }, 10);
-
-    setTimeout(() => {
+    toast._timer = setTimeout(() => {
+        toast.classList.add("fade-out");
         toast.classList.remove("visible");
-
-        setTimeout(() => {
-            toast.remove();
-        }, 250);
     }, 2600);
 }
 
@@ -1700,17 +1772,4 @@ function escapeHtml(value) {
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
-}
-
-function formatHours(value) {
-    const num = Number(value || 0);
-    return `${formatNumber(num)} ч.`;
-}
-
-function formatNumber(value) {
-    const num = Number(value || 0);
-
-    return num
-        .toFixed(2)
-        .replace(".", ",");
 }

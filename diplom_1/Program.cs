@@ -1,4 +1,5 @@
-﻿using diplom_1.Data;
+﻿using diplom_1.Services;
+using diplom_1.Data;
 using diplom_1.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,6 +30,7 @@ builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
 builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("SmtpSettings"));
+builder.Services.AddScoped<EmailNotificationService>();
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();

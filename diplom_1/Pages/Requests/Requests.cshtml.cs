@@ -1,5 +1,6 @@
 ﻿using diplom_1.Data;
 using diplom_1.Models;
+using diplom_1.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
@@ -9,10 +10,14 @@ namespace diplom_1.Pages.Requests
     public class RequestsModel : PageModel
     {
         private readonly AppDbContext _context;
+        private readonly EmailNotificationService _emailNotificationService;
 
-        public RequestsModel(AppDbContext context)
+        public RequestsModel(
+            AppDbContext context,
+            EmailNotificationService emailNotificationService)
         {
             _context = context;
+            _emailNotificationService = emailNotificationService;
         }
 
         public List<RequestDto> Requests { get; set; } = new();
@@ -20,6 +25,10 @@ namespace diplom_1.Pages.Requests
         public List<Organization> Organizations { get; set; } = new();
         public List<Branch> Branches { get; set; } = new();
         public List<Product> Products { get; set; } = new();
+
+        public List<RequestTopic> RequestTopics { get; set; } = new();
+        public List<RequestPriority> RequestPriorities { get; set; } = new();
+        public List<RequestStatus> RequestStatuses { get; set; } = new();
 
         public List<Organization> FilterOrganizations => Organizations;
         public List<Branch> FilterBranches => Branches;
@@ -30,21 +39,8 @@ namespace diplom_1.Pages.Requests
 
         public int CurrentUserId { get; set; }
 
-        public List<string> Statuses { get; } = new()
-        {
-            "Создана",
-            "В работе",
-            "Завершена",
-            "Отменена"
-        };
-
-        public List<string> Priorities { get; } = new()
-        {
-            "Низкий",
-            "Средний",
-            "Высокий",
-            "Критический"
-        };
+        public List<string> Statuses { get; set; } = new();
+        public List<string> Priorities { get; set; } = new();
 
         public int TotalCount { get; set; }
         public int CreatedCount { get; set; }
@@ -115,6 +111,28 @@ namespace diplom_1.Pages.Requests
                 .OrderBy(p => p.Name)
                 .ToListAsync();
 
+            RequestTopics = await _context.RequestTopics
+                .OrderBy(t => t.Name)
+                .ToListAsync();
+
+            RequestPriorities = await _context.RequestPriorities
+                .OrderBy(p => p.Id)
+                .ToListAsync();
+
+            RequestStatuses = await _context.RequestStatuses
+                .OrderBy(s => s.Id)
+                .ToListAsync();
+
+            Statuses = RequestStatuses
+                .Select(s => s.Name)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .ToList();
+
+            Priorities = RequestPriorities
+                .Select(p => p.Name)
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .ToList();
+
             CreateOrganizations = await _context.Organizations
                 .Where(o => CreateOrgIds.Contains(o.Id))
                 .OrderBy(o => o.Name)
@@ -135,6 +153,9 @@ namespace diplom_1.Pages.Requests
                 .Include(r => r.Organization)
                 .Include(r => r.Branch)
                 .Include(r => r.Product)
+                .Include(r => r.RequestTopic)
+                .Include(r => r.RequestPriority)
+                .Include(r => r.RequestStatus)
                 .Include(r => r.CreatedBy)
                 .Where(r =>
                     r.CreatedById == userId ||
@@ -145,10 +166,10 @@ namespace diplom_1.Pages.Requests
             var currentList = await accessibleQuery.ToListAsync();
 
             CurrentTotalCount = currentList.Count;
-            CurrentCreatedCount = currentList.Count(r => r.Status == "Создана");
-            CurrentInWorkCount = currentList.Count(r => r.Status == "В работе");
-            CurrentDoneCount = currentList.Count(r => r.Status == "Завершена");
-            CurrentCancelledCount = currentList.Count(r => r.Status == "Отменена");
+            CurrentCreatedCount = currentList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Создана");
+            CurrentInWorkCount = currentList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "В работе");
+            CurrentDoneCount = currentList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Завершена");
+            CurrentCancelledCount = currentList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Отменена");
 
             DateTime from = DateTime.UtcNow.AddMonths(-12);
             DateTime to = DateTime.UtcNow;
@@ -158,22 +179,31 @@ namespace diplom_1.Pages.Requests
                 .ToList();
 
             TotalCount = periodList.Count;
-            CreatedCount = periodList.Count(r => r.Status == "Создана");
-            InWorkCount = periodList.Count(r => r.Status == "В работе");
-            DoneCount = periodList.Count(r => r.Status == "Завершена");
-            CancelledCount = periodList.Count(r => r.Status == "Отменена");
+            CreatedCount = periodList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Создана");
+            InWorkCount = periodList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "В работе");
+            DoneCount = periodList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Завершена");
+            CancelledCount = periodList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Отменена");
 
             Requests = periodList
                 .Select(r => new RequestDto
                 {
                     Id = r.Id,
                     Title = r.Title,
-                    Topic = r.Topic ?? "",
+
+                    Topic = r.RequestTopic?.Name ?? "",
+
                     ProductName = r.Product?.Name ?? "-",
+                    ProductId = r.ProductId,
+
                     OrganizationName = r.Organization?.Name ?? "-",
+                    OrganizationId = r.OrganizationId,
+
                     BranchAddress = r.Branch?.Address ?? "-",
-                    Priority = r.Priority,
-                    Status = r.Status,
+                    BranchId = r.BranchId,
+
+                    Priority = r.RequestPriority?.Name ?? "",
+                    Status = r.RequestStatus?.Name ?? "",
+
                     ClientName = r.CreatedBy?.FullName ?? "-",
                     CreatedAt = r.CreatedAt,
                     WorkHours = CalculateWorkHours(r.Id)
@@ -188,7 +218,7 @@ namespace diplom_1.Pages.Requests
                     OrgName = org.Name,
                     LimitHours = org.WorkHoursLimit,
                     SpentHours = Requests
-                        .Where(r => r.OrganizationName == org.Name)
+                        .Where(r => r.OrganizationId == org.Id)
                         .Sum(r => r.WorkHours)
                 })
                 .ToList();
@@ -199,20 +229,20 @@ namespace diplom_1.Pages.Requests
         private void FillPermissions(List<UserPermission> userPermissions)
         {
             var taskPermissions = userPermissions
-                .Where(up => up.Permission.Module == "Задачи")
+                .Where(up => string.Equals(up.Permission.Module, "Задачи", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            CanCreate = taskPermissions.Any(up => up.Permission.Action.Contains("Добавление"));
-            CanEdit = taskPermissions.Any(up => up.Permission.Action.Contains("редактирование"));
-            CanDelete = taskPermissions.Any(up => up.Permission.Action.Contains("Удаление"));
-            CanSeeClientColumn = taskPermissions.Any(up => up.Permission.Action.Contains("Просмотр столбца"));
-            CanSeeStatistics = taskPermissions.Any(up => up.Permission.Action.Contains("Статистика"));
-            CanSeeAnalytics = taskPermissions.Any(up => up.Permission.Action.Contains("Аналитика"));
-            CanCreateForOthers = taskPermissions.Any(up => up.Permission.Action.Contains("Создать от имени"));
+            CanCreate = taskPermissions.Any(up => ActionContains(up, "Добавление"));
+            CanEdit = taskPermissions.Any(up => ActionContains(up, "Редактирование"));
+            CanDelete = taskPermissions.Any(up => ActionContains(up, "Удаление"));
+            CanSeeClientColumn = taskPermissions.Any(up => ActionContains(up, "Просмотр столбца"));
+            CanSeeStatistics = taskPermissions.Any(up => ActionContains(up, "Статистика"));
+            CanSeeAnalytics = taskPermissions.Any(up => ActionContains(up, "Аналитика"));
+            CanCreateForOthers = taskPermissions.Any(up => ActionContains(up, "Создать от имени"));
 
             ViewOrgIds = taskPermissions
                 .Where(up =>
-                    up.Permission.Action.Contains("Просмотр") &&
+                    ActionIs(up, "Просмотр") &&
                     up.OrganizationId != null)
                 .Select(up => up.OrganizationId!.Value)
                 .Distinct()
@@ -220,7 +250,7 @@ namespace diplom_1.Pages.Requests
 
             ViewBranchIds = taskPermissions
                 .Where(up =>
-                    up.Permission.Action.Contains("Просмотр") &&
+                    ActionIs(up, "Просмотр") &&
                     up.BranchId != null)
                 .Select(up => up.BranchId!.Value)
                 .Distinct()
@@ -228,7 +258,7 @@ namespace diplom_1.Pages.Requests
 
             CreateOrgIds = taskPermissions
                 .Where(up =>
-                    up.Permission.Action.Contains("Добавление") &&
+                    ActionContains(up, "Добавление") &&
                     up.OrganizationId != null)
                 .Select(up => up.OrganizationId!.Value)
                 .Distinct()
@@ -236,11 +266,26 @@ namespace diplom_1.Pages.Requests
 
             CreateBranchIds = taskPermissions
                 .Where(up =>
-                    up.Permission.Action.Contains("Добавление") &&
+                    ActionContains(up, "Добавление") &&
                     up.BranchId != null)
                 .Select(up => up.BranchId!.Value)
                 .Distinct()
                 .ToList();
+        }
+
+        private static bool ActionIs(UserPermission up, string action)
+        {
+            return string.Equals(
+                up.Permission.Action?.Trim(),
+                action,
+                StringComparison.OrdinalIgnoreCase
+            );
+        }
+
+        private static bool ActionContains(UserPermission up, string actionPart)
+        {
+            return (up.Permission.Action ?? "")
+                .Contains(actionPart, StringComparison.OrdinalIgnoreCase);
         }
 
         private async Task FillClientDataAsync()
@@ -284,23 +329,28 @@ namespace diplom_1.Pages.Requests
         private double CalculateWorkHours(int requestId)
         {
             var history = _context.RequestStatusHistories
+                .Include(h => h.RequestStatus)
                 .Where(h => h.RequestId == requestId)
                 .OrderBy(h => h.ChangedAt)
                 .ToList();
 
             if (history.Count == 0)
+            {
                 return 0;
+            }
 
             DateTime? start = null;
             double sum = 0;
 
             foreach (var h in history)
             {
-                if (h.Status == "В работе")
+                var statusName = h.RequestStatus?.Name ?? "";
+
+                if (statusName == "В работе")
                 {
                     start = h.ChangedAt;
                 }
-                else if ((h.Status == "Завершена" || h.Status == "Отменена") && start != null)
+                else if ((statusName == "Завершена" || statusName == "Отменена") && start != null)
                 {
                     sum += (h.ChangedAt - start.Value).TotalHours;
                     start = null;
@@ -348,6 +398,20 @@ namespace diplom_1.Pages.Requests
                     return new JsonResult(new { success = false, error = "Заголовок обязателен" });
                 }
 
+                if (!form.TryGetValue("RequestTopicId", out var topicIdValue) ||
+                    !int.TryParse(topicIdValue, out int requestTopicId))
+                {
+                    return new JsonResult(new { success = false, error = "Тема обязательна" });
+                }
+
+                var topic = await _context.RequestTopics
+                    .FirstOrDefaultAsync(t => t.Id == requestTopicId);
+
+                if (topic == null)
+                {
+                    return new JsonResult(new { success = false, error = "Некорректная тема" });
+                }
+
                 if (!form.TryGetValue("OrganizationId", out var orgIdValue) ||
                     !int.TryParse(orgIdValue, out int orgId))
                 {
@@ -369,27 +433,34 @@ namespace diplom_1.Pages.Requests
                     return new JsonResult(new { success = false, error = "Продукт обязателен" });
                 }
 
-                if (!form.TryGetValue("Priority", out var priorityValue) ||
-                    string.IsNullOrWhiteSpace(priorityValue))
+                if (!form.TryGetValue("RequestPriorityId", out var priorityIdValue) ||
+                    !int.TryParse(priorityIdValue, out int requestPriorityId))
                 {
                     return new JsonResult(new { success = false, error = "Приоритет обязателен" });
                 }
 
-                string priority = priorityValue.ToString();
+                var priority = await _context.RequestPriorities
+                    .FirstOrDefaultAsync(p => p.Id == requestPriorityId);
 
-                if (!Priorities.Contains(priority))
+                if (priority == null)
                 {
                     return new JsonResult(new { success = false, error = "Некорректный приоритет" });
                 }
 
-                string title = titleValue.ToString().Trim();
-                string topic = form["Topic"].ToString().Trim();
-                string description = form["Description"].ToString().Trim();
+                var createdStatus = await _context.RequestStatuses
+                    .FirstOrDefaultAsync(s => s.Name == "Создана");
 
-                if (string.IsNullOrWhiteSpace(topic))
+                if (createdStatus == null)
                 {
-                    return new JsonResult(new { success = false, error = "Тема обязательна" });
+                    return new JsonResult(new
+                    {
+                        success = false,
+                        error = "Статус «Создана» не найден в справочнике"
+                    });
                 }
+
+                string title = titleValue.ToString().Trim();
+                string description = form["Description"].ToString().Trim();
 
                 int? branchId = null;
 
@@ -421,14 +492,16 @@ namespace diplom_1.Pages.Requests
                     }
                 }
 
-                var organizationExists = await _context.Organizations.AnyAsync(o => o.Id == orgId);
+                var organizationExists = await _context.Organizations
+                    .AnyAsync(o => o.Id == orgId);
 
                 if (!organizationExists)
                 {
                     return new JsonResult(new { success = false, error = "Организация не найдена" });
                 }
 
-                var productExists = await _context.Products.AnyAsync(p => p.Id == productId);
+                var productExists = await _context.Products
+                    .AnyAsync(p => p.Id == productId);
 
                 if (!productExists)
                 {
@@ -472,7 +545,8 @@ namespace diplom_1.Pages.Requests
 
                 if (createdById.HasValue)
                 {
-                    var userExists = await _context.Users.AnyAsync(u => u.Id == createdById.Value);
+                    var userExists = await _context.Users
+                        .AnyAsync(u => u.Id == createdById.Value);
 
                     if (!userExists)
                     {
@@ -513,12 +587,12 @@ namespace diplom_1.Pages.Requests
                 var newRequest = new Request
                 {
                     Title = title,
-                    Topic = topic,
+                    RequestTopicId = requestTopicId,
                     OrganizationId = orgId,
                     BranchId = branchId,
                     ProductId = productId,
-                    Priority = priority,
-                    Status = "Создана",
+                    RequestPriorityId = requestPriorityId,
+                    RequestStatusId = createdStatus.Id,
                     CreatedById = createdById,
                     Description = description,
                     CreatedAt = DateTime.UtcNow
@@ -530,7 +604,8 @@ namespace diplom_1.Pages.Requests
                 var statusHistory = new RequestStatusHistory
                 {
                     RequestId = newRequest.Id,
-                    Status = "Создана",
+                    RequestStatusId = createdStatus.Id,
+                    ChangedById = uid,
                     ChangedAt = DateTime.UtcNow
                 };
 
@@ -539,6 +614,18 @@ namespace diplom_1.Pages.Requests
                 await SaveRequestFilesAsync(newRequest.Id, form.Files);
 
                 await _context.SaveChangesAsync();
+
+                try
+                {
+                    await _emailNotificationService.NotifyRequestCreatedAsync(
+                        newRequest.Id,
+                        null
+                    );
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Ошибка отправки уведомления о создании заявки: {ex.Message}");
+                }
 
                 return new JsonResult(new
                 {
@@ -561,7 +648,9 @@ namespace diplom_1.Pages.Requests
         private async Task SaveRequestFilesAsync(int requestId, IFormFileCollection files)
         {
             if (files == null || files.Count == 0)
+            {
                 return;
+            }
 
             var allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -578,12 +667,16 @@ namespace diplom_1.Pages.Requests
             foreach (var file in files)
             {
                 if (file == null || file.Length == 0)
+                {
                     continue;
+                }
 
                 var extension = Path.GetExtension(file.FileName);
 
                 if (!allowedExtensions.Contains(extension))
+                {
                     continue;
+                }
 
                 string safeOriginalName = Path.GetFileName(file.FileName);
                 string fileName = $"{Guid.NewGuid()}_{safeOriginalName}";
@@ -732,10 +825,10 @@ namespace diplom_1.Pages.Requests
         }
 
         public async Task<IActionResult> OnGetApiEstimateHoursAsync(
-            string topic,
+            int requestTopicId,
             int organizationId,
             int productId,
-            string priority,
+            int requestPriorityId,
             int? branchId = null,
             string description = "")
         {
@@ -768,7 +861,10 @@ namespace diplom_1.Pages.Requests
                     });
                 }
 
-                if (string.IsNullOrWhiteSpace(topic))
+                var topicEntity = await _context.RequestTopics
+                    .FirstOrDefaultAsync(t => t.Id == requestTopicId);
+
+                if (topicEntity == null)
                 {
                     return new JsonResult(new
                     {
@@ -777,7 +873,10 @@ namespace diplom_1.Pages.Requests
                     });
                 }
 
-                if (!Priorities.Contains(priority))
+                var priorityEntity = await _context.RequestPriorities
+                    .FirstOrDefaultAsync(p => p.Id == requestPriorityId);
+
+                if (priorityEntity == null)
                 {
                     return new JsonResult(new
                     {
@@ -785,6 +884,9 @@ namespace diplom_1.Pages.Requests
                         error = "Некорректный приоритет"
                     });
                 }
+
+                string topic = topicEntity.Name;
+                string priority = priorityEntity.Name;
 
                 if (!CreateOrgIds.Contains(organizationId) && !ViewOrgIds.Contains(organizationId))
                 {
@@ -854,9 +956,15 @@ namespace diplom_1.Pages.Requests
                     .Include(r => r.Organization)
                     .Include(r => r.Branch)
                     .Include(r => r.Product)
+                    .Include(r => r.RequestTopic)
+                    .Include(r => r.RequestPriority)
+                    .Include(r => r.RequestStatus)
                     .Where(r =>
-                        r.Status == "Завершена" ||
-                        r.Status == "Отменена")
+                        r.RequestStatus != null &&
+                        (
+                            r.RequestStatus.Name == "Завершена" ||
+                            r.RequestStatus.Name == "Отменена"
+                        ))
                     .Where(r =>
                         r.CreatedById == uid ||
                         (r.OrganizationId != null && ViewOrgIds.Contains(r.OrganizationId.Value)) ||
@@ -867,11 +975,11 @@ namespace diplom_1.Pages.Requests
                     .Select(r => new EstimateSampleDto
                     {
                         RequestId = r.Id,
-                        Topic = r.Topic ?? "",
+                        Topic = r.RequestTopic?.Name ?? "",
                         OrganizationId = r.OrganizationId,
                         BranchId = r.BranchId,
                         ProductId = r.ProductId,
-                        Priority = r.Priority,
+                        Priority = r.RequestPriority?.Name ?? "",
                         Hours = CalculateWorkHours(r.Id)
                     })
                     .Where(x => x.Hours > 0)
@@ -988,22 +1096,34 @@ namespace diplom_1.Pages.Requests
             string normalized = NormalizeText(topic);
 
             if (normalized.Contains("интерфейс"))
+            {
                 return 6;
+            }
 
             if (normalized.Contains("ошиб"))
+            {
                 return 4;
+            }
 
             if (normalized.Contains("аналитик"))
+            {
                 return 8;
+            }
 
             if (normalized.Contains("отчет") || normalized.Contains("отчёт"))
+            {
                 return 7;
+            }
 
             if (normalized.Contains("доступ") || normalized.Contains("прав"))
+            {
                 return 3;
+            }
 
             if (normalized.Contains("интеграц"))
+            {
                 return 10;
+            }
 
             return 5;
         }
@@ -1023,18 +1143,26 @@ namespace diplom_1.Pages.Requests
         private static double GetDescriptionFactor(string description)
         {
             if (string.IsNullOrWhiteSpace(description))
+            {
                 return 1.0;
+            }
 
             int length = description.Trim().Length;
 
             if (length < 80)
+            {
                 return 1.0;
+            }
 
             if (length < 250)
+            {
                 return 1.08;
+            }
 
             if (length < 600)
+            {
                 return 1.18;
+            }
 
             return 1.3;
         }
@@ -1042,7 +1170,9 @@ namespace diplom_1.Pages.Requests
         private static double GetSampleWeight(int sampleCount, string source)
         {
             if (sampleCount <= 0)
+            {
                 return 0;
+            }
 
             double countWeight =
                 sampleCount >= 10 ? 0.9 :
@@ -1067,10 +1197,14 @@ namespace diplom_1.Pages.Requests
         private static string GetConfidence(int sampleCount, string source)
         {
             if (sampleCount >= 6 && (source == "exact" || source == "productTopic"))
+            {
                 return "high";
+            }
 
             if (sampleCount >= 3 && source != "common")
+            {
                 return "medium";
+            }
 
             return "low";
         }
@@ -1078,7 +1212,9 @@ namespace diplom_1.Pages.Requests
         private static double GetTrimmedAverage(List<double> values)
         {
             if (values.Count == 0)
+            {
                 return 0;
+            }
 
             var ordered = values
                 .Where(v => v > 0)
@@ -1086,10 +1222,14 @@ namespace diplom_1.Pages.Requests
                 .ToList();
 
             if (ordered.Count == 0)
+            {
                 return 0;
+            }
 
             if (ordered.Count <= 4)
+            {
                 return ordered.Average();
+            }
 
             int removeCount = Math.Max(1, (int)Math.Floor(ordered.Count * 0.1));
 
@@ -1099,7 +1239,9 @@ namespace diplom_1.Pages.Requests
                 .ToList();
 
             if (trimmed.Count == 0)
+            {
                 return ordered.Average();
+            }
 
             return trimmed.Average();
         }
@@ -1120,9 +1262,16 @@ namespace diplom_1.Pages.Requests
             public int Id { get; set; }
             public string Title { get; set; } = "";
             public string Topic { get; set; } = "";
+
             public string ProductName { get; set; } = "";
+            public int? ProductId { get; set; }
+
             public string OrganizationName { get; set; } = "";
+            public int? OrganizationId { get; set; }
+
             public string BranchAddress { get; set; } = "";
+            public int? BranchId { get; set; }
+
             public string Priority { get; set; } = "";
             public string Status { get; set; } = "";
             public string ClientName { get; set; } = "";

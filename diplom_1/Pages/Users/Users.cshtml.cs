@@ -26,6 +26,9 @@ namespace diplom_1.Pages.Users
         }
 
         public List<UserDisplayDto> Users { get; set; } = new();
+
+        public int CurrentUserId { get; set; }
+
         public bool IsSuperAdmin { get; set; }
         public bool CanCreateOrganization { get; set; }
         public bool CanCreateBranch { get; set; }
@@ -33,16 +36,24 @@ namespace diplom_1.Pages.Users
         public async Task OnGetAsync()
         {
             var currentUserId = HttpContext.Session.GetInt32("UserId");
+            CurrentUserId = currentUserId ?? 0;
+
             IsSuperAdmin = HttpContext.Session.GetInt32("IsSuperAdmin") == 1;
 
             var userOrgsString = HttpContext.Session.GetString("UserOrganizations");
             var userOrgIds = string.IsNullOrEmpty(userOrgsString)
                 ? new List<int>()
-                : userOrgsString.Split(',').Where(x => !string.IsNullOrEmpty(x)).Select(int.Parse).ToList();
+                : userOrgsString
+                    .Split(',')
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .Select(int.Parse)
+                    .ToList();
 
             var usersQuery = _context.Users
-                .Include(u => u.UserOrganizations).ThenInclude(uo => uo.Organization)
-                .Include(u => u.UserBranches).ThenInclude(ub => ub.Branch)
+                .Include(u => u.UserOrganizations)
+                    .ThenInclude(uo => uo.Organization)
+                .Include(u => u.UserBranches)
+                    .ThenInclude(ub => ub.Branch)
                 .Where(u => u.UserOrganizations.Any(uo => userOrgIds.Contains(uo.OrganizationId)))
                 .AsQueryable();
 
@@ -76,6 +87,9 @@ namespace diplom_1.Pages.Users
 
         public async Task<IActionResult> OnGetUserDetailsAsync(int id)
         {
+            var currentUserId = HttpContext.Session.GetInt32("UserId") ?? 0;
+            var isCurrentUserSuperAdmin = HttpContext.Session.GetInt32("IsSuperAdmin") == 1;
+
             var user = await _context.Users
                 .Include(u => u.UserOrganizations)
                 .Include(u => u.UserBranches)
@@ -83,7 +97,14 @@ namespace diplom_1.Pages.Users
                 .FirstOrDefaultAsync(u => u.Id == id);
 
             if (user == null)
+            {
                 return NotFound();
+            }
+
+            if (!isCurrentUserSuperAdmin && user.IsSuperAdmin && user.Id != currentUserId)
+            {
+                return Forbid();
+            }
 
             return new JsonResult(new
             {
@@ -92,7 +113,9 @@ namespace diplom_1.Pages.Users
                 email = user.Email,
                 login = user.Login,
                 isSuperAdmin = user.IsSuperAdmin,
-                photoPath = string.IsNullOrEmpty(user.PhotoPath) ? "/icons/default-avatar.png" : user.PhotoPath.Replace("~", ""),
+                photoPath = string.IsNullOrEmpty(user.PhotoPath)
+                    ? "/icons/default-avatar.png"
+                    : user.PhotoPath.Replace("~", ""),
                 organizations = user.UserOrganizations.Select(o => o.OrganizationId).ToList(),
                 branches = user.UserBranches.Select(b => b.BranchId).ToList(),
                 permissions = user.UserPermissions.Select(p => new
@@ -108,30 +131,90 @@ namespace diplom_1.Pages.Users
         public async Task<IActionResult> OnPostSaveUserAsync([FromBody] UserSaveDto data)
         {
             if (data == null)
+            {
                 return BadRequest("Нет данных.");
+            }
 
             try
             {
                 User user;
                 bool isNew = data.Id == 0;
-                string generatedPassword = null;
+                string? generatedPassword = null;
 
                 var currentUserId = HttpContext.Session.GetInt32("UserId");
                 var isCurrentUserSuperAdmin = HttpContext.Session.GetInt32("IsSuperAdmin") == 1;
+
                 var currentUserOrgs = HttpContext.Session.GetString("UserOrganizations")?
                     .Split(',')
                     .Where(x => !string.IsNullOrEmpty(x))
                     .Select(int.Parse)
                     .ToList() ?? new List<int>();
 
+                var permissionsValidation = ValidateUserPermissions(data.Permissions);
+
+                if (!permissionsValidation.Success)
+                {
+                    return new JsonResult(new
+                    {
+                        success = false,
+                        message = permissionsValidation.Message
+                    });
+                }
+
+                if (!isCurrentUserSuperAdmin)
+                {
+                    var requestedPermissionOrgIds = data.Permissions
+                        .SelectMany(p => p.OrganizationIds ?? new List<int>())
+                        .Where(id => id > 0)
+                        .Distinct()
+                        .ToList();
+
+                    if (requestedPermissionOrgIds.Any(orgId => !currentUserOrgs.Contains(orgId)))
+                    {
+                        return new JsonResult(new
+                        {
+                            success = false,
+                            message = "Вы не можете назначать права для недоступной организации"
+                        });
+                    }
+
+                    var requestedBranchIds = data.Permissions
+                        .SelectMany(p => p.BranchIds ?? new List<int>())
+                        .Where(id => id > 0)
+                        .Distinct()
+                        .ToList();
+
+                    if (requestedBranchIds.Any())
+                    {
+                        bool hasForbiddenBranches = await _context.Branches
+                            .AnyAsync(b =>
+                                requestedBranchIds.Contains(b.Id) &&
+                                !currentUserOrgs.Contains(b.OrganizationId));
+
+                        if (hasForbiddenBranches)
+                        {
+                            return new JsonResult(new
+                            {
+                                success = false,
+                                message = "Вы не можете назначать права для филиалов недоступных организаций"
+                            });
+                        }
+                    }
+                }
+
                 if (isNew)
                 {
                     if (!isCurrentUserSuperAdmin && data.Organizations.Any(orgId => !currentUserOrgs.Contains(orgId)))
                     {
-                        return new JsonResult(new { success = false, message = "Вы не можете создать пользователя в этой организации" });
+                        return new JsonResult(new
+                        {
+                            success = false,
+                            message = "Вы не можете создать пользователя в этой организации"
+                        });
                     }
 
                     generatedPassword = GeneratePassword();
+
                     user = new User
                     {
                         FullName = data.FullName,
@@ -141,6 +224,7 @@ namespace diplom_1.Pages.Users
                         PhotoPath = string.IsNullOrWhiteSpace(data.PhotoPath) ? "~/icons/default-avatar.png" : data.PhotoPath,
                         IsSuperAdmin = isCurrentUserSuperAdmin && data.IsSuperAdmin
                     };
+
                     _context.Users.Add(user);
                     await _context.SaveChangesAsync();
                 }
@@ -153,15 +237,22 @@ namespace diplom_1.Pages.Users
                         .FirstOrDefaultAsync(u => u.Id == data.Id);
 
                     if (user == null)
+                    {
                         return NotFound("Пользователь не найден.");
+                    }
 
                     if (!isCurrentUserSuperAdmin)
                     {
                         var allowedOrgIds = currentUserOrgs;
                         var userOrgIds = user.UserOrganizations.Select(uo => uo.OrganizationId).ToList();
+
                         if (!userOrgIds.All(orgId => allowedOrgIds.Contains(orgId)))
                         {
-                            return new JsonResult(new { success = false, message = "У вас нет прав на редактирование этого пользователя" });
+                            return new JsonResult(new
+                            {
+                                success = false,
+                                message = "У вас нет прав на редактирование этого пользователя"
+                            });
                         }
                     }
 
@@ -170,26 +261,40 @@ namespace diplom_1.Pages.Users
                     user.Login = data.Login;
 
                     if (!string.IsNullOrWhiteSpace(data.Password))
+                    {
                         user.Password = HashPassword(data.Password);
+                    }
 
                     if (!string.IsNullOrWhiteSpace(data.PhotoPath))
-                        user.PhotoPath = data.PhotoPath;
-
-                    if (isCurrentUserSuperAdmin && data.Id != currentUserId)
                     {
-                        user.IsSuperAdmin = data.IsSuperAdmin;
+                        user.PhotoPath = data.PhotoPath;
+                    }
+
+                    if (isCurrentUserSuperAdmin)
+                    {
+                        if (currentUserId.HasValue && data.Id == currentUserId.Value)
+                        {
+                            user.IsSuperAdmin = true;
+                        }
+                        else
+                        {
+                            user.IsSuperAdmin = data.IsSuperAdmin;
+                        }
                     }
 
                     _context.UserOrganizations.RemoveRange(user.UserOrganizations);
                     _context.UserBranches.RemoveRange(user.UserBranches);
                     _context.UserPermissions.RemoveRange(user.UserPermissions);
+
                     await _context.SaveChangesAsync();
                 }
 
                 foreach (var orgId in data.Organizations.Distinct())
                 {
                     if (!isCurrentUserSuperAdmin && !currentUserOrgs.Contains(orgId))
+                    {
                         continue;
+                    }
 
                     _context.UserOrganizations.Add(new UserOrganization
                     {
@@ -200,6 +305,20 @@ namespace diplom_1.Pages.Users
 
                 foreach (var branchId in data.Branches.Distinct())
                 {
+                    var branch = await _context.Branches
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(b => b.Id == branchId);
+
+                    if (branch == null)
+                    {
+                        continue;
+                    }
+
+                    if (!isCurrentUserSuperAdmin && !currentUserOrgs.Contains(branch.OrganizationId))
+                    {
+                        continue;
+                    }
+
                     _context.UserBranches.Add(new UserBranch
                     {
                         UserId = user.Id,
@@ -209,24 +328,55 @@ namespace diplom_1.Pages.Users
 
                 foreach (var p in data.Permissions)
                 {
-                    if (p.OrganizationIds == null || p.BranchIds == null)
-                        continue;
+                    var organizationIds = p.OrganizationIds?
+                        .Where(id => id > 0)
+                        .Distinct()
+                        .ToList() ?? new List<int>();
 
-                    foreach (var orgId in p.OrganizationIds)
+                    var branchIds = p.BranchIds?
+                        .Where(id => id > 0)
+                        .Distinct()
+                        .ToList() ?? new List<int>();
+
+                    foreach (var orgId in organizationIds)
                     {
                         if (!isCurrentUserSuperAdmin && !currentUserOrgs.Contains(orgId))
-                            continue;
-
-                        foreach (var brId in p.BranchIds)
                         {
-                            _context.UserPermissions.Add(new UserPermission
-                            {
-                                UserId = user.Id,
-                                PermissionId = p.PermissionId,
-                                OrganizationId = orgId,
-                                BranchId = brId
-                            });
+                            continue;
                         }
+
+                        _context.UserPermissions.Add(new UserPermission
+                        {
+                            UserId = user.Id,
+                            PermissionId = p.PermissionId,
+                            OrganizationId = orgId,
+                            BranchId = null
+                        });
+                    }
+
+                    foreach (var branchId in branchIds)
+                    {
+                        var branch = await _context.Branches
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(b => b.Id == branchId);
+
+                        if (branch == null)
+                        {
+                            continue;
+                        }
+
+                        if (!isCurrentUserSuperAdmin && !currentUserOrgs.Contains(branch.OrganizationId))
+                        {
+                            continue;
+                        }
+
+                        _context.UserPermissions.Add(new UserPermission
+                        {
+                            UserId = user.Id,
+                            PermissionId = p.PermissionId,
+                            OrganizationId = branch.OrganizationId,
+                            BranchId = branchId
+                        });
                     }
                 }
 
@@ -234,7 +384,8 @@ namespace diplom_1.Pages.Users
 
                 if (data.SendEmail)
                 {
-                    string passwordToSend = isNew ? (generatedPassword ?? data.Password) : data.Password;
+                    string? passwordToSend = isNew ? (generatedPassword ?? data.Password) : data.Password;
+
                     if (!string.IsNullOrEmpty(passwordToSend))
                     {
                         await SendCredentialsEmail(user.Email, user.Login, passwordToSend);
@@ -244,15 +395,28 @@ namespace diplom_1.Pages.Users
                 if (currentUserId != null && currentUserId == user.Id)
                 {
                     HttpContext.Session.SetString("FullName", user.FullName ?? "");
-                    var photoPath = string.IsNullOrEmpty(user.PhotoPath) ? "~/icons/default-avatar.png" : user.PhotoPath;
+
+                    var photoPath = string.IsNullOrEmpty(user.PhotoPath)
+                        ? "~/icons/default-avatar.png"
+                        : user.PhotoPath;
+
                     HttpContext.Session.SetString("PhotoPath", photoPath);
+                    HttpContext.Session.SetInt32("IsSuperAdmin", user.IsSuperAdmin ? 1 : 0);
                 }
 
-                return new JsonResult(new { success = true, isNew });
+                return new JsonResult(new
+                {
+                    success = true,
+                    isNew
+                });
             }
             catch (Exception ex)
             {
-                return new JsonResult(new { success = false, message = ex.Message });
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
             }
         }
 
@@ -262,12 +426,27 @@ namespace diplom_1.Pages.Users
             var currentUserId = HttpContext.Session.GetInt32("UserId");
             var isCurrentUserSuperAdmin = HttpContext.Session.GetInt32("IsSuperAdmin") == 1;
 
+            if (currentUserId.HasValue && id == currentUserId.Value)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Нельзя удалить самого себя"
+                });
+            }
+
             var user = await _context.Users
                 .Include(u => u.UserOrganizations)
                 .FirstOrDefaultAsync(u => u.Id == id);
 
             if (user == null)
-                return new JsonResult(new { success = false });
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Пользователь не найден"
+                });
+            }
 
             if (!isCurrentUserSuperAdmin)
             {
@@ -279,16 +458,24 @@ namespace diplom_1.Pages.Users
 
                 if (!user.UserOrganizations.Any(uo => currentUserOrgs.Contains(uo.OrganizationId)))
                 {
-                    return new JsonResult(new { success = false, message = "У вас нет прав на удаление этого пользователя" });
+                    return new JsonResult(new
+                    {
+                        success = false,
+                        message = "У вас нет прав на удаление этого пользователя"
+                    });
                 }
             }
 
             _context.Users.Remove(user);
             await _context.SaveChangesAsync();
-            return new JsonResult(new { success = true });
+
+            return new JsonResult(new
+            {
+                success = true
+            });
         }
 
-        public async Task<IActionResult> OnGetGetUsersAsync(int page = 1, int pageSize = 10, string orgIds = null, string branchIds = null)
+        public async Task<IActionResult> OnGetGetUsersAsync(int page = 1, int pageSize = 10, string? orgIds = null, string? branchIds = null)
         {
             var currentUserId = HttpContext.Session.GetInt32("UserId");
             var isSuperAdmin = HttpContext.Session.GetInt32("IsSuperAdmin") == 1;
@@ -299,12 +486,19 @@ namespace diplom_1.Pages.Users
                 .Select(int.Parse)
                 .ToList() ?? new List<int>();
 
-            var selectedOrgIds = string.IsNullOrEmpty(orgIds) ? new List<int>() : orgIds.Split(',').Select(int.Parse).ToList();
-            var selectedBranchIds = string.IsNullOrEmpty(branchIds) ? new List<int>() : branchIds.Split(',').Select(int.Parse).ToList();
+            var selectedOrgIds = string.IsNullOrEmpty(orgIds)
+                ? new List<int>()
+                : orgIds.Split(',').Where(x => !string.IsNullOrEmpty(x)).Select(int.Parse).ToList();
+
+            var selectedBranchIds = string.IsNullOrEmpty(branchIds)
+                ? new List<int>()
+                : branchIds.Split(',').Where(x => !string.IsNullOrEmpty(x)).Select(int.Parse).ToList();
 
             var usersQuery = _context.Users
-                .Include(u => u.UserOrganizations).ThenInclude(uo => uo.Organization)
-                .Include(u => u.UserBranches).ThenInclude(ub => ub.Branch)
+                .Include(u => u.UserOrganizations)
+                    .ThenInclude(uo => uo.Organization)
+                .Include(u => u.UserBranches)
+                    .ThenInclude(ub => ub.Branch)
                 .Where(u => u.UserOrganizations.Any(uo => userOrgIds.Contains(uo.OrganizationId)))
                 .AsQueryable();
 
@@ -343,9 +537,9 @@ namespace diplom_1.Pages.Users
             return new JsonResult(new
             {
                 data = users,
-                totalCount = totalCount,
-                page = page,
-                pageSize = pageSize,
+                totalCount,
+                page,
+                pageSize,
                 totalPages = (int)Math.Ceiling((double)totalCount / pageSize)
             });
         }
@@ -405,19 +599,24 @@ namespace diplom_1.Pages.Users
             return new JsonResult(new
             {
                 data = orgs,
-                totalCount = totalCount,
-                page = page,
-                pageSize = pageSize,
+                totalCount,
+                page,
+                pageSize,
                 totalPages = (int)Math.Ceiling((double)totalCount / pageSize)
             });
         }
 
-        
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> OnPostSaveOrgAsync([FromBody] OrgDto dto)
         {
             if (dto == null || string.IsNullOrWhiteSpace(dto.Name))
-                return new JsonResult(new { success = false, message = "Название организации обязательно" });
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Название организации обязательно"
+                });
+            }
 
             var isSuperAdmin = HttpContext.Session.GetInt32("IsSuperAdmin") == 1;
 
@@ -431,17 +630,28 @@ namespace diplom_1.Pages.Users
 
                 if (!userOrgIds.Contains(dto.Id))
                 {
-                    return new JsonResult(new { success = false, message = "У вас нет прав на редактирование этой организации" });
+                    return new JsonResult(new
+                    {
+                        success = false,
+                        message = "У вас нет прав на редактирование этой организации"
+                    });
                 }
             }
 
             try
             {
                 Organization org;
+
                 if (dto.Id == 0)
                 {
                     if (!isSuperAdmin)
-                        return new JsonResult(new { success = false, message = "Только супер-администратор может создавать организации" });
+                    {
+                        return new JsonResult(new
+                        {
+                            success = false,
+                            message = "Только супер-администратор может создавать организации"
+                        });
+                    }
 
                     org = new Organization
                     {
@@ -451,12 +661,13 @@ namespace diplom_1.Pages.Users
                         OGRN = dto.Ogrn ?? "",
                         WorkHoursLimit = dto.WorkHoursLimit
                     };
+
                     _context.Organizations.Add(org);
                     await _context.SaveChangesAsync();
 
                     if (dto.ProductIds != null && dto.ProductIds.Any())
                     {
-                        foreach (var productId in dto.ProductIds)
+                        foreach (var productId in dto.ProductIds.Distinct())
                         {
                             _context.OrganizationProducts.Add(new OrganizationProduct
                             {
@@ -464,14 +675,22 @@ namespace diplom_1.Pages.Users
                                 ProductId = productId
                             });
                         }
+
                         await _context.SaveChangesAsync();
                     }
                 }
                 else
                 {
                     org = await _context.Organizations.FirstOrDefaultAsync(o => o.Id == dto.Id);
+
                     if (org == null)
-                        return new JsonResult(new { success = false, message = "Организация не найдена" });
+                    {
+                        return new JsonResult(new
+                        {
+                            success = false,
+                            message = "Организация не найдена"
+                        });
+                    }
 
                     org.Name = dto.Name;
                     org.INN = dto.Inn ?? "";
@@ -484,7 +703,7 @@ namespace diplom_1.Pages.Users
 
                     if (dto.ProductIds != null && dto.ProductIds.Any())
                     {
-                        foreach (var productId in dto.ProductIds)
+                        foreach (var productId in dto.ProductIds.Distinct())
                         {
                             _context.OrganizationProducts.Add(new OrganizationProduct
                             {
@@ -493,14 +712,22 @@ namespace diplom_1.Pages.Users
                             });
                         }
                     }
+
                     await _context.SaveChangesAsync();
                 }
 
-                return new JsonResult(new { success = true });
+                return new JsonResult(new
+                {
+                    success = true
+                });
             }
             catch (Exception ex)
             {
-                return new JsonResult(new { success = false, message = ex.Message });
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
             }
         }
 
@@ -519,7 +746,11 @@ namespace diplom_1.Pages.Users
 
                 if (!userOrgIds.Contains(id))
                 {
-                    return new JsonResult(new { success = false, message = "У вас нет прав на удаление этой организации" });
+                    return new JsonResult(new
+                    {
+                        success = false,
+                        message = "У вас нет прав на удаление этой организации"
+                    });
                 }
             }
 
@@ -528,14 +759,30 @@ namespace diplom_1.Pages.Users
                 .FirstOrDefaultAsync(o => o.Id == id);
 
             if (org == null)
-                return new JsonResult(new { success = false });
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Организация не найдена"
+                });
+            }
 
             if (org.Branches.Any())
-                return new JsonResult(new { success = false, message = "Сначала удалите филиалы" });
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Сначала удалите филиалы"
+                });
+            }
 
             _context.Organizations.Remove(org);
             await _context.SaveChangesAsync();
-            return new JsonResult(new { success = true });
+
+            return new JsonResult(new
+            {
+                success = true
+            });
         }
 
         public async Task<IActionResult> OnGetGetBranchesAsync(int page = 1, int pageSize = 10)
@@ -563,7 +810,9 @@ namespace diplom_1.Pages.Users
                 .Select(up => up.OrganizationId)
                 .ToListAsync();
 
-            var branchesQuery = _context.Branches.Include(b => b.Organization).AsQueryable();
+            var branchesQuery = _context.Branches
+                .Include(b => b.Organization)
+                .AsQueryable();
 
             if (!isSuperAdmin)
             {
@@ -590,9 +839,9 @@ namespace diplom_1.Pages.Users
             return new JsonResult(new
             {
                 data = branches,
-                totalCount = totalCount,
-                page = page,
-                pageSize = pageSize,
+                totalCount,
+                page,
+                pageSize,
                 totalPages = (int)Math.Ceiling((double)totalCount / pageSize)
             });
         }
@@ -601,9 +850,16 @@ namespace diplom_1.Pages.Users
         public async Task<IActionResult> OnPostSaveBranchAsync([FromBody] BranchDto dto)
         {
             if (dto == null || string.IsNullOrWhiteSpace(dto.Address))
-                return new JsonResult(new { success = false, message = "Адрес филиала обязателен" });
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Адрес филиала обязателен"
+                });
+            }
 
             var isSuperAdmin = HttpContext.Session.GetInt32("IsSuperAdmin") == 1;
+
             var userOrgIds = HttpContext.Session.GetString("UserOrganizations")?
                 .Split(',')
                 .Where(x => !string.IsNullOrEmpty(x))
@@ -612,12 +868,17 @@ namespace diplom_1.Pages.Users
 
             if (!isSuperAdmin && !userOrgIds.Contains(dto.OrganizationId))
             {
-                return new JsonResult(new { success = false, message = "У вас нет прав на создание филиала в этой организации" });
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "У вас нет прав на создание филиала в этой организации"
+                });
             }
 
             try
             {
                 Branch branch;
+
                 if (dto.Id == 0)
                 {
                     branch = new Branch
@@ -625,17 +886,29 @@ namespace diplom_1.Pages.Users
                         Address = dto.Address,
                         OrganizationId = dto.OrganizationId
                     };
+
                     _context.Branches.Add(branch);
                 }
                 else
                 {
                     branch = await _context.Branches.FirstOrDefaultAsync(b => b.Id == dto.Id);
+
                     if (branch == null)
-                        return new JsonResult(new { success = false, message = "Филиал не найден" });
+                    {
+                        return new JsonResult(new
+                        {
+                            success = false,
+                            message = "Филиал не найден"
+                        });
+                    }
 
                     if (!isSuperAdmin && !userOrgIds.Contains(branch.OrganizationId))
                     {
-                        return new JsonResult(new { success = false, message = "У вас нет прав на редактирование этого филиала" });
+                        return new JsonResult(new
+                        {
+                            success = false,
+                            message = "У вас нет прав на редактирование этого филиала"
+                        });
                     }
 
                     branch.Address = dto.Address;
@@ -643,11 +916,19 @@ namespace diplom_1.Pages.Users
                 }
 
                 await _context.SaveChangesAsync();
-                return new JsonResult(new { success = true });
+
+                return new JsonResult(new
+                {
+                    success = true
+                });
             }
             catch (Exception ex)
             {
-                return new JsonResult(new { success = false, message = ex.Message });
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
             }
         }
 
@@ -655,6 +936,7 @@ namespace diplom_1.Pages.Users
         public async Task<IActionResult> OnPostDeleteBranchAsync(int id)
         {
             var isSuperAdmin = HttpContext.Session.GetInt32("IsSuperAdmin") == 1;
+
             var userOrgIds = HttpContext.Session.GetString("UserOrganizations")?
                 .Split(',')
                 .Where(x => !string.IsNullOrEmpty(x))
@@ -662,17 +944,32 @@ namespace diplom_1.Pages.Users
                 .ToList() ?? new List<int>();
 
             var branch = await _context.Branches.FirstOrDefaultAsync(b => b.Id == id);
+
             if (branch == null)
-                return new JsonResult(new { success = false });
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Филиал не найден"
+                });
+            }
 
             if (!isSuperAdmin && !userOrgIds.Contains(branch.OrganizationId))
             {
-                return new JsonResult(new { success = false, message = "У вас нет прав на удаление этого филиала" });
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "У вас нет прав на удаление этого филиала"
+                });
             }
 
             _context.Branches.Remove(branch);
             await _context.SaveChangesAsync();
-            return new JsonResult(new { success = true });
+
+            return new JsonResult(new
+            {
+                success = true
+            });
         }
 
         public async Task<IActionResult> OnGetDictionariesAsync()
@@ -686,7 +983,9 @@ namespace diplom_1.Pages.Users
                 .Select(int.Parse)
                 .ToList() ?? new List<int>();
 
-            var orgsQuery = _context.Organizations.Include(o => o.Branches).AsQueryable();
+            var orgsQuery = _context.Organizations
+                .Include(o => o.Branches)
+                .AsQueryable();
 
             if (!isSuperAdmin)
             {
@@ -698,7 +997,11 @@ namespace diplom_1.Pages.Users
                 {
                     id = o.Id,
                     name = o.Name,
-                    branches = o.Branches.Select(b => new { id = b.Id, address = b.Address })
+                    branches = o.Branches.Select(b => new
+                    {
+                        id = b.Id,
+                        address = b.Address
+                    })
                 })
                 .ToListAsync();
 
@@ -738,7 +1041,8 @@ namespace diplom_1.Pages.Users
                     .ToListAsync<dynamic>();
             }
 
-            object roles = null;
+            object? roles = null;
+
             if (isSuperAdmin)
             {
                 roles = await _context.Roles
@@ -753,14 +1057,23 @@ namespace diplom_1.Pages.Users
                     .ToListAsync();
             }
 
-            return new JsonResult(new { orgs, perms, roles });
+            return new JsonResult(new
+            {
+                orgs,
+                perms,
+                roles
+            });
         }
 
         public async Task<IActionResult> OnGetGetProductsForOrgAsync(int orgId)
         {
             var allProducts = await _context.Products
                 .OrderBy(p => p.Name)
-                .Select(p => new { p.Id, p.Name })
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Name
+                })
                 .ToListAsync();
 
             var selectedProductIds = await _context.OrganizationProducts
@@ -770,8 +1083,8 @@ namespace diplom_1.Pages.Users
 
             return new JsonResult(new
             {
-                allProducts = allProducts,
-                selectedProductIds = selectedProductIds
+                allProducts,
+                selectedProductIds
             });
         }
 
@@ -779,15 +1092,29 @@ namespace diplom_1.Pages.Users
         public async Task<IActionResult> OnPostUploadPhotoAsync(IFormFile photo)
         {
             if (photo == null || photo.Length == 0)
-                return new JsonResult(new { success = false });
+            {
+                return new JsonResult(new
+                {
+                    success = false
+                });
+            }
 
             try
             {
-                var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "users");
-                if (!Directory.Exists(uploadsDir))
-                    Directory.CreateDirectory(uploadsDir);
+                var uploadsDir = Path.Combine(
+                    Directory.GetCurrentDirectory(),
+                    "wwwroot",
+                    "uploads",
+                    "users"
+                );
 
-                var fileName = $"{Guid.NewGuid()}{Path.GetExtension(photo.FileName)}";
+                if (!Directory.Exists(uploadsDir))
+                {
+                    Directory.CreateDirectory(uploadsDir);
+                }
+
+                var extension = Path.GetExtension(photo.FileName);
+                var fileName = $"{Guid.NewGuid()}{extension}";
                 var filePath = Path.Combine(uploadsDir, fileName);
 
                 using (var stream = new FileStream(filePath, FileMode.Create))
@@ -796,25 +1123,71 @@ namespace diplom_1.Pages.Users
                 }
 
                 var relativePath = $"~/uploads/users/{fileName}";
-                return new JsonResult(new { success = true, path = relativePath });
+
+                return new JsonResult(new
+                {
+                    success = true,
+                    path = relativePath
+                });
             }
             catch
             {
-                return new JsonResult(new { success = false });
+                return new JsonResult(new
+                {
+                    success = false
+                });
             }
+        }
+
+        private static ValidationResult ValidateUserPermissions(List<PermissionDto>? permissions)
+        {
+            if (permissions == null || !permissions.Any())
+            {
+                return ValidationResult.Ok();
+            }
+
+            foreach (var permission in permissions)
+            {
+                if (permission.PermissionId <= 0)
+                {
+                    return ValidationResult.Fail("Выбрано некорректное право");
+                }
+
+                var hasOrganizations = permission.OrganizationIds != null &&
+                                       permission.OrganizationIds.Any(id => id > 0);
+
+                var hasBranches = permission.BranchIds != null &&
+                                  permission.BranchIds.Any(id => id > 0);
+
+                if (!hasOrganizations && !hasBranches)
+                {
+                    return ValidationResult.Fail(
+                        "Для каждого выбранного права необходимо указать организацию или филиал"
+                    );
+                }
+            }
+
+            return ValidationResult.Ok();
         }
 
         private string GeneratePassword(int length = 10)
         {
             const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
             var random = new Random();
-            return new string(Enumerable.Repeat(chars, length).Select(s => s[random.Next(s.Length)]).ToArray());
+
+            return new string(
+                Enumerable
+                    .Repeat(chars, length)
+                    .Select(s => s[random.Next(s.Length)])
+                    .ToArray()
+            );
         }
 
         private string HashPassword(string password)
         {
             using var sha = SHA256.Create();
             var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(password));
+
             return Convert.ToHexString(bytes).ToLowerInvariant();
         }
 
@@ -827,15 +1200,18 @@ namespace diplom_1.Pages.Users
                 _logger.LogInformation($"Логин: {login}");
 
                 var smtpSettings = _smtpSettings.Value;
+
                 _logger.LogInformation($"SMTP Host: {smtpSettings.Host}, Port: {smtpSettings.Port}");
 
                 var message = new MimeMessage();
+
                 message.From.Add(new MailboxAddress(smtpSettings.FromName, smtpSettings.FromEmail));
                 message.To.Add(new MailboxAddress("", email));
                 message.Subject = "Данные для входа в систему";
 
-                var bodyBuilder = new BodyBuilder();
-                bodyBuilder.HtmlBody = $@"
+                var bodyBuilder = new BodyBuilder
+                {
+                    HtmlBody = $@"
 <html>
 <body>
     <h3>Здравствуйте!</h3>
@@ -846,13 +1222,21 @@ namespace diplom_1.Pages.Users
     <hr/>
     <small>Это письмо сгенерировано автоматически.</small>
 </body>
-</html>";
+</html>"
+                };
 
                 message.Body = bodyBuilder.ToMessageBody();
 
                 using var client = new SmtpClient();
+
                 client.ServerCertificateValidationCallback = (s, c, h, e) => true;
-                await client.ConnectAsync(smtpSettings.Host, smtpSettings.Port, SecureSocketOptions.SslOnConnect);
+
+                await client.ConnectAsync(
+                    smtpSettings.Host,
+                    smtpSettings.Port,
+                    SecureSocketOptions.SslOnConnect
+                );
+
                 await client.AuthenticateAsync(smtpSettings.Username, smtpSettings.Password);
                 await client.SendAsync(message);
                 await client.DisconnectAsync(true);
@@ -862,6 +1246,29 @@ namespace diplom_1.Pages.Users
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Ошибка отправки email: {ex.Message}");
+            }
+        }
+
+        private class ValidationResult
+        {
+            public bool Success { get; set; }
+            public string Message { get; set; } = "";
+
+            public static ValidationResult Ok()
+            {
+                return new ValidationResult
+                {
+                    Success = true
+                };
+            }
+
+            public static ValidationResult Fail(string message)
+            {
+                return new ValidationResult
+                {
+                    Success = false,
+                    Message = message
+                };
             }
         }
 

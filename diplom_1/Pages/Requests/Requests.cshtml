@@ -162,25 +162,18 @@
                         </div>
 
                         <div class="dropdown-menu hidden" id="statusFilterMenu">
-                            <label>
-                                <input type="checkbox" class="filter-status" value="Создана" checked />
-                                Создана
-                            </label>
+                            @foreach (var status in Model.Statuses)
+                            {
+                                var isDefaultChecked = status == "Создана" || status == "В работе";
 
-                            <label>
-                                <input type="checkbox" class="filter-status" value="В работе" checked />
-                                В работе
-                            </label>
-
-                            <label>
-                                <input type="checkbox" class="filter-status" value="Завершена" />
-                                Завершена
-                            </label>
-
-                            <label>
-                                <input type="checkbox" class="filter-status" value="Отменена" />
-                                Отменена
-                            </label>
+                                <label>
+                                    <input type="checkbox"
+                                           class="filter-status"
+                                           value="@status"
+                                           checked="@isDefaultChecked" />
+                                    @status
+                                </label>
+                            }
                         </div>
                     </div>
                 </div>
@@ -252,7 +245,7 @@
         <section class="analytics-wrapper">
             <div class="analytics-header">
                 <button type="button" id="toggleAnalyticsBtn" class="analytics-toggle">
-                    Показать аналитику
+                    Сводка по заявкам
                 </button>
             </div>
 
@@ -399,9 +392,11 @@
                             <label for="reqTopic">Тема</label>
                             <select id="reqTopic" required>
                                 <option value="">Выберите тему</option>
-                                <option>Изменение интерфейса</option>
-                                <option>Исправление ошибок</option>
-                                <option>Улучшение аналитики</option>
+
+                                @foreach (var topic in Model.RequestTopics)
+                                {
+                                    <option value="@topic.Id">@topic.Name</option>
+                                }
                             </select>
                         </div>
                     </div>
@@ -444,10 +439,11 @@
                             <label for="reqPriority">Приоритет</label>
                             <select id="reqPriority" required>
                                 <option value="">Выберите приоритет</option>
-                                <option>Низкий</option>
-                                <option>Средний</option>
-                                <option>Высокий</option>
-                                <option>Критический</option>
+
+                                @foreach (var priority in Model.RequestPriorities)
+                                {
+                                    <option value="@priority.Id">@priority.Name</option>
+                                }
                             </select>
                         </div>
                     </div>
