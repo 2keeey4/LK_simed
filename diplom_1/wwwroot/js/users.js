@@ -192,6 +192,10 @@ function initUserHandlers() {
         const tr = e.target.closest("tr[data-user-id]");
 
         if (tr && !e.target.classList.contains("delete-user")) {
+            if (e.target.closest(".compact-list-more") || e.target.closest(".compact-list")) {
+                return;
+            }
+
             await openEditModal(tr.dataset.userId);
         }
 
@@ -415,7 +419,7 @@ function openCreateModal() {
 
     renderPermissions(currentPermissions);
 
-   
+
 
     document.getElementById("userModal").style.display = "flex";
     switchTab("tab-general", false);
@@ -983,19 +987,21 @@ async function loadOrgs(page = 1) {
                 : '-';
 
             tr.innerHTML = `
-                <td>${org.name}</td>
-                <td>${org.inn || ""}</td>
-                <td>${org.kpp || ""}</td>
-                <td>${org.ogrn || ""}</td>
+                <td class="list-cell">${formatCompactList([org.name], 1)}</td>
+                <td>${escapeHtml(org.inn || "")}</td>
+                <td>${escapeHtml(org.kpp || "")}</td>
+                <td>${escapeHtml(org.ogrn || "")}</td>
                 <td>${org.workHoursLimit || 0} ч.</td>
-                <td><span title="${productsList.join(', ')}">${productsDisplay}</span></td>
+                <td class="list-cell">${formatCompactList(productsList, 3)}</td>
                 <td>${org.canDelete ? '<button class="btn small danger delete-org">Удалить</button>' : ''}</td>
             `;
             tbody.appendChild(tr);
         });
 
-        orgTotalPages = result.totalPages;
+        orgCurrentPage = Number(result.page || orgCurrentPage || 1);
+        orgTotalPages = Number(result.totalPages || 1);
         renderOrgPagination();
+        bindCompactListButtons(tbody);
 
         document.querySelectorAll(".org-row").forEach(tr => {
             const canDelete = tr.dataset.canDelete === 'true';
@@ -1016,26 +1022,7 @@ async function loadOrgs(page = 1) {
     }
 }
 function renderOrgPagination() {
-    const container = document.getElementById("orgsPagination");
-    if (!container) return;
-
-    if (orgTotalPages <= 1) {
-        container.innerHTML = "";
-        return;
-    }
-
-    let html = '<div class="pagination">';
-    for (let i = 1; i <= orgTotalPages; i++) {
-        html += `<button class="btn small ${i === orgCurrentPage ? 'primary' : 'secondary'}" data-page="${i}">${i}</button>`;
-    }
-    html += '</div>';
-    container.innerHTML = html;
-
-    container.querySelectorAll("[data-page]").forEach(btn => {
-        btn.addEventListener("click", () => {
-            loadOrgs(parseInt(btn.dataset.page));
-        });
-    });
+    renderPagination("orgsPagination", orgCurrentPage, orgTotalPages, page => loadOrgs(page));
 }
 
 function openOrgModal() {
@@ -1223,15 +1210,17 @@ async function loadBranches(page = 1) {
             tr.dataset.canDelete = b.canDelete;
             tr.className = "branch-row";
             tr.innerHTML = `
-                <td>${b.address}</td>
-                <td>${b.organization}</td>
+                <td class="list-cell">${formatCompactList([b.address], 1)}</td>
+                <td class="list-cell">${formatCompactList([b.organization], 1)}</td>
                 <td>${b.canDelete ? '<button class="btn small danger delete-branch">Удалить</button>' : ''}</td>
             `;
             tbody.appendChild(tr);
         });
 
-        branchTotalPages = result.totalPages;
+        branchCurrentPage = Number(result.page || branchCurrentPage || 1);
+        branchTotalPages = Number(result.totalPages || 1);
         renderBranchPagination();
+        bindCompactListButtons(tbody);
         updateBranchFilter();
 
         document.querySelectorAll(".branch-row").forEach(tr => {
@@ -1254,41 +1243,177 @@ async function loadBranches(page = 1) {
 }
 
 function renderBranchPagination() {
-    const container = document.getElementById("branchesPagination");
-    if (!container) return;
+    renderPagination("branchesPagination", branchCurrentPage, branchTotalPages, page => loadBranches(page));
+}
 
-    if (branchTotalPages <= 1) {
-        container.innerHTML = "";
-        return;
+
+function formatCompactList(values, maxVisible = 2, title = "Список") {
+    const list = Array.isArray(values)
+        ? values.filter(value => String(value || "").trim().length > 0)
+        : [];
+
+    if (list.length === 0) {
+        return `<span class="compact-list empty">—</span>`;
     }
 
-    let html = '<div class="pagination">';
-    for (let i = 1; i <= branchTotalPages; i++) {
-        html += `<button class="btn small ${i === branchCurrentPage ? 'primary' : 'secondary'}" data-page="${i}">${i}</button>`;
-    }
-    html += '</div>';
-    container.innerHTML = html;
+    const visible = list.slice(0, maxVisible);
+    const hidden = list.slice(maxVisible);
+    const hiddenCount = hidden.length;
+    const fullText = list.join(', ');
+    const shortText = visible.join(', ');
+    const moreText = hiddenCount > 0
+        ? ` <button type="button" class="compact-list-more" data-popup-title="${escapeHtml(title)}" data-popup-items="${escapeHtml(JSON.stringify(list))}" title="Показать весь список">+${hiddenCount}</button>`
+        : '';
 
-    container.querySelectorAll("[data-page]").forEach(btn => {
-        btn.addEventListener("click", () => {
-            loadBranches(parseInt(btn.dataset.page));
+    return `<span class="compact-list" title="${escapeHtml(fullText)}">${escapeHtml(shortText)}${moreText}</span>`;
+}
+
+function showCompactListPopup(title, items) {
+    const safeItems = Array.isArray(items) ? items : [];
+
+    let popup = document.getElementById("compactListPopup");
+
+    if (!popup) {
+        popup = document.createElement("div");
+        popup.id = "compactListPopup";
+        popup.className = "compact-list-popup hidden";
+        popup.innerHTML = `
+            <div class="compact-list-popup-overlay"></div>
+            <div class="compact-list-popup-window">
+                <div class="compact-list-popup-header">
+                    <h4></h4>
+                    <button type="button" class="compact-list-popup-close">×</button>
+                </div>
+                <div class="compact-list-popup-body"></div>
+            </div>
+        `;
+        document.body.appendChild(popup);
+
+        popup.querySelector(".compact-list-popup-overlay")?.addEventListener("click", closeCompactListPopup);
+        popup.querySelector(".compact-list-popup-close")?.addEventListener("click", closeCompactListPopup);
+    }
+
+    popup.querySelector("h4").textContent = title || "Список";
+    popup.querySelector(".compact-list-popup-body").innerHTML = safeItems
+        .map(item => `<div class="compact-list-popup-item">${escapeHtml(item)}</div>`)
+        .join("") || `<div class="compact-list-popup-empty">Нет данных</div>`;
+
+    popup.classList.remove("hidden");
+}
+
+function closeCompactListPopup() {
+    document.getElementById("compactListPopup")?.classList.add("hidden");
+}
+
+function bindCompactListButtons(scope = document) {
+    scope.querySelectorAll(".compact-list-more").forEach(button => {
+        if (button.dataset.bound === "true") {
+            return;
+        }
+
+        button.dataset.bound = "true";
+        button.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            let items = [];
+            try {
+                items = JSON.parse(button.dataset.popupItems || "[]");
+            } catch {
+                items = [];
+            }
+
+            showCompactListPopup(button.dataset.popupTitle || "Список", items);
         });
     });
 }
 
+function renderPagination(containerId, currentPage, totalPages, onPageClick) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    totalPages = Number(totalPages || 1);
+    currentPage = Number(currentPage || 1);
+
+    if (totalPages <= 1) {
+        container.innerHTML = "";
+        return;
+    }
+
+    const pages = buildPaginationPages(currentPage, totalPages);
+
+    let html = `<div class="pagination pagination-modern">`;
+    html += `<button class="btn small secondary pagination-nav" data-page="${currentPage - 1}" ${currentPage === 1 ? "disabled" : ""}>‹</button>`;
+
+    pages.forEach(page => {
+        if (page === "...") {
+            html += `<span class="pagination-dots">…</span>`;
+        } else {
+            html += `<button class="btn small ${page === currentPage ? "primary" : "secondary"}" data-page="${page}">${page}</button>`;
+        }
+    });
+
+    html += `<button class="btn small secondary pagination-nav" data-page="${currentPage + 1}" ${currentPage === totalPages ? "disabled" : ""}>›</button>`;
+    html += `<span class="pagination-info">Стр. ${currentPage} из ${totalPages}</span>`;
+    html += `</div>`;
+
+    container.innerHTML = html;
+
+    container.querySelectorAll("button[data-page]:not(:disabled)").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const page = Number(btn.dataset.page);
+            if (!page || page < 1 || page > totalPages || page === currentPage) return;
+            onPageClick(page);
+        });
+    });
+}
+
+function buildPaginationPages(currentPage, totalPages) {
+    if (totalPages <= 7) {
+        return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const pages = [1];
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+
+    if (start > 2) {
+        pages.push("...");
+    }
+
+    for (let page = start; page <= end; page++) {
+        pages.push(page);
+    }
+
+    if (end < totalPages - 1) {
+        pages.push("...");
+    }
+
+    pages.push(totalPages);
+    return pages;
+}
+
 async function loadUsers(page = 1) {
     try {
-        userCurrentPage = page;
-        let url = `/Users/Users?handler=GetUsers&page=${page}&pageSize=${userPageSize}`;
+        userCurrentPage = Number(page || 1);
+
+        const params = new URLSearchParams({
+            handler: "GetUsers",
+            page: String(userCurrentPage),
+            pageSize: String(userPageSize),
+            _: String(Date.now())
+        });
 
         if (userSelectedOrgs.length > 0) {
-            url += `&orgIds=${userSelectedOrgs.join(',')}`;
+            params.set("orgIds", userSelectedOrgs.join(","));
         }
         if (userSelectedBranches.length > 0) {
-            url += `&branchIds=${userSelectedBranches.join(',')}`;
+            params.set("branchIds", userSelectedBranches.join(","));
         }
 
-        const res = await fetch(url);
+        const res = await fetch(`/Users/Users?${params.toString()}`, {
+            cache: "no-store"
+        });
         const result = await res.json();
 
         const tbody = document.querySelector("#usersTable tbody");
@@ -1298,21 +1423,27 @@ async function loadUsers(page = 1) {
             const tr = document.createElement("tr");
             tr.dataset.userId = user.id;
             tr.innerHTML = `
-                <td>${user.fullName}</td>
-                <td>${user.login}</td>
-                <td>${user.email}</td>
-                <td>${user.organizations.join(', ')}<\/td>
-                <td>${user.branches.join(', ')}<\/td>
-                <td><button class="btn small danger delete-user">Удалить<\/button><\/td>
+                <td>${escapeHtml(user.fullName)}</td>
+                <td>${escapeHtml(user.login)}</td>
+                <td>${escapeHtml(user.email)}</td>
+                <td class="list-cell">${formatCompactList(user.organizations, 2, "Организации пользователя")}</td>
+                <td class="list-cell">${formatCompactList(user.branches, 2, "Филиалы пользователя")}</td>
+                <td><button class="btn small danger delete-user">Удалить</button></td>
             `;
             tbody.appendChild(tr);
         });
 
-        userTotalPages = result.totalPages;
+        userCurrentPage = Number(result.page || userCurrentPage || 1);
+        userTotalPages = Number(result.totalPages || 1);
         renderUserPagination();
+        bindCompactListButtons(tbody);
 
         document.querySelectorAll("#usersTable tbody tr").forEach(tr => {
             tr.addEventListener("click", async (e) => {
+                if (e.target.closest(".compact-list-more") || e.target.closest(".compact-list")) {
+                    return;
+                }
+
                 if (!e.target.classList.contains("delete-user")) {
                     await openEditModal(tr.dataset.userId);
                 }
@@ -1432,26 +1563,7 @@ function updateUserBranchFilter() {
 }
 
 function renderUserPagination() {
-    const container = document.getElementById("usersPagination");
-    if (!container) return;
-
-    if (userTotalPages <= 1) {
-        container.innerHTML = "";
-        return;
-    }
-
-    let html = '<div class="pagination">';
-    for (let i = 1; i <= userTotalPages; i++) {
-        html += `<button class="btn small ${i === userCurrentPage ? 'primary' : 'secondary'}" data-page="${i}">${i}</button>`;
-    }
-    html += '</div>';
-    container.innerHTML = html;
-
-    container.querySelectorAll("[data-page]").forEach(btn => {
-        btn.addEventListener("click", () => {
-            loadUsers(parseInt(btn.dataset.page));
-        });
-    });
+    renderPagination("usersPagination", userCurrentPage, userTotalPages, page => loadUsers(page));
 }
 
 async function openBranchModal() {
@@ -1854,4 +1966,502 @@ function escapeHtml(value) {
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
+}
+/* =========================
+   CLIENT-SIDE PAGINATION FIX
+   Не меняет модалки/сохранение/права. Исправляет только вывод таблиц,
+   чтобы лишние пустые страницы не показывались после поиска/фильтров.
+========================= */
+
+let managementAllUsers = [];
+let managementAllOrgs = [];
+let managementAllBranches = [];
+let managementOriginalUsers = [];
+let managementOriginalOrgs = [];
+let managementOriginalBranches = [];
+let branchSelectedOrgIds = [];
+
+async function loadUsers(page = 1) {
+    try {
+        userCurrentPage = Number(page || 1);
+
+        const params = new URLSearchParams({
+            handler: "GetUsers",
+            page: "1",
+            pageSize: "100000",
+            _: String(Date.now())
+        });
+
+        if (userSelectedOrgs.length > 0) {
+            params.set("orgIds", userSelectedOrgs.join(","));
+        }
+
+        if (userSelectedBranches.length > 0) {
+            params.set("branchIds", userSelectedBranches.join(","));
+        }
+
+        const res = await fetch(`/Users/Users?${params.toString()}`, {
+            cache: "no-store"
+        });
+
+        const result = await res.json();
+        managementAllUsers = Array.isArray(result.data) ? result.data : [];
+        managementOriginalUsers = managementAllUsers.slice();
+
+        renderUsersPage();
+    } catch (error) {
+        console.error("Ошибка загрузки пользователей:", error);
+    }
+}
+
+function getFilteredUsersData() {
+    const term = (document.getElementById("searchUser")?.value || "").trim().toLowerCase();
+
+    if (!term) {
+        return managementAllUsers.slice();
+    }
+
+    return managementAllUsers.filter(user => {
+        const area = [
+            user.fullName,
+            user.login,
+            user.email,
+            ...(user.organizations || []),
+            ...(user.branches || [])
+        ].join(" ").toLowerCase();
+
+        return area.includes(term);
+    });
+}
+
+function renderUsersPage() {
+    const tbody = document.querySelector("#usersTable tbody");
+    if (!tbody) return;
+
+    const data = getFilteredUsersData();
+    userTotalPages = Math.max(Math.ceil(data.length / userPageSize), 1);
+
+    if (userCurrentPage > userTotalPages) {
+        userCurrentPage = userTotalPages;
+    }
+
+    if (userCurrentPage < 1) {
+        userCurrentPage = 1;
+    }
+
+    const start = (userCurrentPage - 1) * userPageSize;
+    const pageItems = data.slice(start, start + userPageSize);
+
+    tbody.innerHTML = "";
+
+    pageItems.forEach(user => {
+        const tr = document.createElement("tr");
+        tr.dataset.userId = user.id;
+        tr.innerHTML = `
+            <td>${escapeHtml(user.fullName)}</td>
+            <td>${escapeHtml(user.login)}</td>
+            <td>${escapeHtml(user.email)}</td>
+            <td class="list-cell">${formatCompactList(user.organizations || [], 2, "Организации пользователя")}</td>
+            <td class="list-cell">${formatCompactList(user.branches || [], 2, "Филиалы пользователя")}</td>
+            <td><button class="btn small danger delete-user">Удалить</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    bindCompactListButtons(tbody);
+    renderUserPagination();
+
+    tbody.querySelectorAll("tr[data-user-id]").forEach(tr => {
+        tr.addEventListener("click", async event => {
+            if (event.target.closest(".compact-list-more") || event.target.closest(".compact-list")) {
+                return;
+            }
+
+            if (!event.target.classList.contains("delete-user")) {
+                await openEditModal(tr.dataset.userId);
+            }
+        });
+    });
+}
+
+function renderUserPagination() {
+    const data = getFilteredUsersData();
+    const totalPages = Math.max(Math.ceil(data.length / userPageSize), 1);
+    userTotalPages = totalPages;
+
+    if (data.length <= userPageSize) {
+        const container = document.getElementById("usersPagination");
+        if (container) container.innerHTML = "";
+        return;
+    }
+
+    renderPagination("usersPagination", userCurrentPage, userTotalPages, page => {
+        userCurrentPage = page;
+        renderUsersPage();
+    });
+}
+
+async function loadOrgs(page = 1) {
+    try {
+        orgCurrentPage = Number(page || 1);
+
+        const res = await fetch(`/Users/Users?handler=GetOrgs&page=1&pageSize=100000&_=${Date.now()}`, {
+            cache: "no-store"
+        });
+
+        const result = await res.json();
+        managementAllOrgs = Array.isArray(result.data) ? result.data : [];
+        managementOriginalOrgs = managementAllOrgs.slice();
+
+        renderOrgsPage();
+    } catch (error) {
+        console.error("Ошибка загрузки организаций:", error);
+    }
+}
+
+function getFilteredOrgsData() {
+    const term = (document.getElementById("searchOrg")?.value || "").trim().toLowerCase();
+
+    if (!term) {
+        return managementAllOrgs.slice();
+    }
+
+    return managementAllOrgs.filter(org => {
+        const area = [
+            org.name,
+            org.inn,
+            org.kpp,
+            org.ogrn,
+            ...(org.products || [])
+        ].join(" ").toLowerCase();
+
+        return area.includes(term);
+    });
+}
+
+function renderOrgsPage() {
+    const tbody = document.getElementById("orgsBody");
+    if (!tbody) return;
+
+    const data = getFilteredOrgsData();
+    orgTotalPages = Math.max(Math.ceil(data.length / orgPageSize), 1);
+
+    if (orgCurrentPage > orgTotalPages) {
+        orgCurrentPage = orgTotalPages;
+    }
+
+    if (orgCurrentPage < 1) {
+        orgCurrentPage = 1;
+    }
+
+    const start = (orgCurrentPage - 1) * orgPageSize;
+    const pageItems = data.slice(start, start + orgPageSize);
+
+    tbody.innerHTML = "";
+
+    pageItems.forEach(org => {
+        const tr = document.createElement("tr");
+        tr.dataset.id = org.id;
+        tr.dataset.canEdit = org.canEdit;
+        tr.dataset.canDelete = org.canDelete;
+        tr.className = "org-row";
+
+        tr.innerHTML = `
+            <td class="list-cell">${formatCompactList([org.name], 1, "Организация")}</td>
+            <td>${escapeHtml(org.inn || "")}</td>
+            <td>${escapeHtml(org.kpp || "")}</td>
+            <td>${escapeHtml(org.ogrn || "")}</td>
+            <td>${org.workHoursLimit || 0} ч.</td>
+            <td class="list-cell">${formatCompactList(org.products || [], 3, "Продукты организации")}</td>
+            <td>${org.canDelete ? '<button class="btn small danger delete-org">Удалить</button>' : ''}</td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+
+    bindCompactListButtons(tbody);
+    renderOrgPagination();
+
+    tbody.querySelectorAll(".org-row").forEach(tr => {
+        const canDelete = tr.dataset.canDelete === "true";
+        tr.addEventListener("click", async event => {
+            if (event.target.closest(".compact-list-more") || event.target.closest(".compact-list")) {
+                return;
+            }
+
+            if (event.target.classList.contains("delete-org")) {
+                if (canDelete) {
+                    await deleteOrg(tr.dataset.id);
+                } else {
+                    showToast("У вас нет прав на удаление этой организации");
+                }
+            } else if (!event.target.closest("td:nth-child(6)")) {
+                await editOrg(tr.dataset.id);
+            }
+        });
+    });
+}
+
+function renderOrgPagination() {
+    const data = getFilteredOrgsData();
+    const totalPages = Math.max(Math.ceil(data.length / orgPageSize), 1);
+    orgTotalPages = totalPages;
+
+    if (data.length <= orgPageSize) {
+        const container = document.getElementById("orgsPagination");
+        if (container) container.innerHTML = "";
+        return;
+    }
+
+    renderPagination("orgsPagination", orgCurrentPage, orgTotalPages, page => {
+        orgCurrentPage = page;
+        renderOrgsPage();
+    });
+}
+
+async function loadBranches(page = 1) {
+    try {
+        branchCurrentPage = Number(page || 1);
+
+        const res = await fetch(`/Users/Users?handler=GetBranches&page=1&pageSize=100000&_=${Date.now()}`, {
+            cache: "no-store"
+        });
+
+        const result = await res.json();
+        managementAllBranches = Array.isArray(result.data) ? result.data : [];
+        managementOriginalBranches = managementAllBranches.slice();
+
+        renderBranchesPage();
+        updateBranchFilter();
+    } catch (error) {
+        console.error("Ошибка загрузки филиалов:", error);
+    }
+}
+
+function getFilteredBranchesData() {
+    const term = (document.getElementById("searchBranch")?.value || "").trim().toLowerCase();
+
+    return managementAllBranches.filter(branch => {
+        if (branchSelectedOrgIds.length > 0 && !branchSelectedOrgIds.includes(Number(branch.organizationId))) {
+            return false;
+        }
+
+        if (!term) {
+            return true;
+        }
+
+        const area = [branch.address, branch.organization].join(" ").toLowerCase();
+        return area.includes(term);
+    });
+}
+
+function renderBranchesPage() {
+    const tbody = document.getElementById("branchesBody");
+    if (!tbody) return;
+
+    const data = getFilteredBranchesData();
+    branchTotalPages = Math.max(Math.ceil(data.length / branchPageSize), 1);
+
+    if (branchCurrentPage > branchTotalPages) {
+        branchCurrentPage = branchTotalPages;
+    }
+
+    if (branchCurrentPage < 1) {
+        branchCurrentPage = 1;
+    }
+
+    const start = (branchCurrentPage - 1) * branchPageSize;
+    const pageItems = data.slice(start, start + branchPageSize);
+
+    tbody.innerHTML = "";
+
+    pageItems.forEach(branch => {
+        const tr = document.createElement("tr");
+        tr.dataset.id = branch.id;
+        tr.dataset.orgid = branch.organizationId;
+        tr.dataset.canEdit = branch.canEdit;
+        tr.dataset.canDelete = branch.canDelete;
+        tr.className = "branch-row";
+
+        tr.innerHTML = `
+            <td class="list-cell">${formatCompactList([branch.address], 1, "Адрес филиала")}</td>
+            <td class="list-cell">${formatCompactList([branch.organization], 1, "Организация")}</td>
+            <td>${branch.canDelete ? '<button class="btn small danger delete-branch">Удалить</button>' : ''}</td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+
+    bindCompactListButtons(tbody);
+    renderBranchPagination();
+
+    tbody.querySelectorAll(".branch-row").forEach(tr => {
+        const canDelete = tr.dataset.canDelete === "true";
+        tr.addEventListener("click", async event => {
+            if (event.target.closest(".compact-list-more") || event.target.closest(".compact-list")) {
+                return;
+            }
+
+            if (event.target.classList.contains("delete-branch")) {
+                if (canDelete) {
+                    await deleteBranch(tr.dataset.id);
+                } else {
+                    showToast("У вас нет прав на удаление этого филиала");
+                }
+            } else {
+                await editBranch(tr.dataset.id);
+            }
+        });
+    });
+}
+
+function renderBranchPagination() {
+    const data = getFilteredBranchesData();
+    const totalPages = Math.max(Math.ceil(data.length / branchPageSize), 1);
+    branchTotalPages = totalPages;
+
+    if (data.length <= branchPageSize) {
+        const container = document.getElementById("branchesPagination");
+        if (container) container.innerHTML = "";
+        return;
+    }
+
+    renderPagination("branchesPagination", branchCurrentPage, branchTotalPages, page => {
+        branchCurrentPage = page;
+        renderBranchesPage();
+    });
+}
+
+function updateBranchFilter() {
+    const dropdown = document.getElementById("branchOrgFilterDropdown");
+    if (!dropdown) return;
+
+    const filterBtn = document.getElementById("branchOrgFilterBtn");
+    const orgs = dictionaries.orgs || [];
+
+    if (orgs.length <= 1) {
+        if (filterBtn) {
+            filterBtn.style.display = "none";
+        }
+        branchSelectedOrgIds = [];
+        renderBranchesPage();
+        return;
+    }
+
+    if (filterBtn) {
+        filterBtn.style.display = "inline-block";
+    }
+
+    dropdown.innerHTML = '<label><input type="checkbox" value="all" checked> Все организации</label>';
+
+    orgs.forEach(org => {
+        const label = document.createElement("label");
+        label.style.display = "block";
+        label.style.margin = "5px 0";
+        label.innerHTML = `<input type="checkbox" class="org-filter-checkbox" value="${org.id}"> ${escapeHtml(org.name)}`;
+        dropdown.appendChild(label);
+    });
+
+    dropdown.onchange = event => {
+        const checkboxes = Array.from(dropdown.querySelectorAll(".org-filter-checkbox"));
+        const allCheckbox = dropdown.querySelector('input[value="all"]');
+
+        if (event.target.value === "all") {
+            checkboxes.forEach(cb => cb.checked = false);
+            branchSelectedOrgIds = [];
+            if (allCheckbox) allCheckbox.checked = true;
+        } else {
+            if (allCheckbox) allCheckbox.checked = false;
+            branchSelectedOrgIds = checkboxes
+                .filter(cb => cb.checked)
+                .map(cb => Number(cb.value));
+
+            if (branchSelectedOrgIds.length === 0 && allCheckbox) {
+                allCheckbox.checked = true;
+            }
+        }
+
+        branchCurrentPage = 1;
+        renderBranchesPage();
+    };
+}
+
+function initSearchAndSort() {
+    document.getElementById("searchUser")?.addEventListener("input", () => {
+        userCurrentPage = 1;
+        renderUsersPage();
+    });
+
+    document.getElementById("searchOrg")?.addEventListener("input", () => {
+        orgCurrentPage = 1;
+        renderOrgsPage();
+    });
+
+    document.getElementById("searchBranch")?.addEventListener("input", () => {
+        branchCurrentPage = 1;
+        renderBranchesPage();
+    });
+
+    document.getElementById("sortUsers")?.addEventListener("click", event => {
+        cycleSortData({
+            type: "user",
+            button: event.target,
+            getState: () => userSortAsc,
+            setState: value => userSortAsc = value,
+            dataGetter: () => managementAllUsers,
+            dataSetter: value => managementAllUsers = value,
+            originalGetter: () => managementOriginalUsers,
+            selector: item => item.fullName || "",
+            render: () => renderUsersPage()
+        });
+    });
+
+    document.getElementById("sortOrgs")?.addEventListener("click", event => {
+        cycleSortData({
+            button: event.target,
+            getState: () => orgSortAsc,
+            setState: value => orgSortAsc = value,
+            dataGetter: () => managementAllOrgs,
+            dataSetter: value => managementAllOrgs = value,
+            originalGetter: () => managementOriginalOrgs,
+            selector: item => item.name || "",
+            render: () => renderOrgsPage()
+        });
+    });
+
+    document.getElementById("sortBranches")?.addEventListener("click", event => {
+        cycleSortData({
+            button: event.target,
+            getState: () => branchSortAsc,
+            setState: value => branchSortAsc = value,
+            dataGetter: () => managementAllBranches,
+            dataSetter: value => managementAllBranches = value,
+            originalGetter: () => managementOriginalBranches,
+            selector: item => item.address || "",
+            render: () => renderBranchesPage()
+        });
+    });
+}
+
+function cycleSortData(options) {
+    const state = options.getState();
+    const button = options.button;
+    let data = options.dataGetter().slice();
+
+    if (state === true) {
+        data.sort((a, b) => String(options.selector(a)).localeCompare(String(options.selector(b)), "ru"));
+        options.setState(false);
+        if (button) button.textContent = "Сортировать Я–А";
+    } else if (state === false) {
+        data.sort((a, b) => String(options.selector(b)).localeCompare(String(options.selector(a)), "ru"));
+        options.setState(null);
+        if (button) button.textContent = "Сбросить сортировку";
+    } else {
+        data = options.originalGetter().slice();
+        options.setState(true);
+        if (button) button.textContent = "Сортировать A–Я";
+    }
+
+    options.dataSetter(data);
+    options.render();
 }

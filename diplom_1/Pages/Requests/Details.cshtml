@@ -58,7 +58,7 @@
      data-request-id="@request.Id"
      data-current-user-id="@Model.CurrentUserId"
      data-can-edit="@Model.CanEdit.ToString().ToLower()"
-     data-can-change-status="@Model.CanChangeStatus.ToString().ToLower()"
+     data-can-change-status="@((Model.CanChangeStatus || Model.CanReopenStatus).ToString().ToLower())"
      data-can-delete="@Model.CanDelete.ToString().ToLower()"
      data-can-add-comments="@Model.CanAddComments.ToString().ToLower()"
      data-can-edit-comments="@Model.CanEditComments.ToString().ToLower()"
@@ -491,7 +491,7 @@
                                 @DisplayValue(statusName)
                             </span>
 
-                            @if (Model.CanChangeStatus)
+                            @if (Model.CanChangeStatus || Model.CanReopenStatus)
                             {
                                 <button type="button"
                                         class="icon-edit edit-field-btn"

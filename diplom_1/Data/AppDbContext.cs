@@ -183,7 +183,9 @@ namespace diplom_1.Data
                     new RequestStatus { Id = 1, Name = "Создана" },
                     new RequestStatus { Id = 2, Name = "В работе" },
                     new RequestStatus { Id = 3, Name = "Завершена" },
-                    new RequestStatus { Id = 4, Name = "Отменена" }
+                    new RequestStatus { Id = 4, Name = "Отменена" },
+                    new RequestStatus { Id = 5, Name = "Уточнение" },
+                    new RequestStatus { Id = 6, Name = "Ожидание" }
                 );
             });
 

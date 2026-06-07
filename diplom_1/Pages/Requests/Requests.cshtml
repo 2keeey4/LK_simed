@@ -54,7 +54,7 @@
                 </div>
 
                 <div class="stat-card stat-active">
-                    <div class="stat-value" id="currentActive">@(Model.CurrentCreatedCount + Model.CurrentInWorkCount)</div>
+                    <div class="stat-value" id="currentActive">@(Model.CurrentCreatedCount + Model.CurrentInWorkCount + Model.CurrentClarificationCount + Model.CurrentWaitingCount)</div>
                     <div class="stat-label">Активных</div>
                 </div>
             </div>
@@ -211,7 +211,7 @@
                 }
 
                 <div class="filter-group filter-period">
-                    <label>Период</label>
+                    <label>Период событий</label>
 
                     <div class="date-range">
                         <input type="date"
@@ -259,17 +259,27 @@
                 <div class="analytics-grid">
 
                     <div class="chart-card chart-large">
-                        <h4>Динамика заявок по месяцам</h4>
+                        <div class="chart-card-head">
+                            <h4>Динамика событий по месяцам</h4>
+                            <span class="analytics-scope-badge">за период</span>
+                        </div>
                         <canvas id="trendChart"></canvas>
                     </div>
 
                     <div class="chart-card chart-large">
-                        <h4>Заявки по организациям</h4>
+                        <div class="chart-card-head">
+                            <h4>События по организациям</h4>
+                            <span class="analytics-scope-badge">за период</span>
+                        </div>
                         <canvas id="orgChart"></canvas>
                     </div>
 
+
                     <div class="chart-card chart-status">
-                        <h4>Статусы за период</h4>
+                        <div class="chart-card-head">
+                            <h4>Статусы заявок</h4>
+                            <span class="analytics-scope-badge current">на дату</span>
+                        </div>
 
                         <div class="status-chart-wrap">
                             <canvas id="statusPeriodChart"></canvas>
@@ -279,7 +289,10 @@
                     </div>
 
                     <div class="chart-card chart-hours">
-                        <h4>Контроль лимита часов</h4>
+                        <div class="chart-card-head">
+                            <h4>Контроль лимита часов</h4>
+                            <span class="analytics-scope-badge current">на дату</span>
+                        </div>
                         <div id="hoursTable"></div>
                     </div>
 
@@ -316,7 +329,10 @@
                     {
                         <tr data-request-id="@request.Id"
                             data-client="@request.ClientName"
-                            data-work-hours="@request.WorkHours.ToString(System.Globalization.CultureInfo.InvariantCulture)">
+                            data-work-hours="@request.WorkHours.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                            data-finished-date="@(request.FinishedAt?.ToString("dd.MM.yyyy") ?? "")"
+                            data-cancelled-date="@(request.CancelledAt?.ToString("dd.MM.yyyy") ?? "")"
+                            data-work-hours-running="@request.IsWorkHoursRunning.ToString().ToLower()">
                             <td class="action-cell">
                                 <button type="button"
                                         class="details-btn"
@@ -354,6 +370,38 @@
                     }
                 </tbody>
             </table>
+        </div>
+
+        <div class="table-pagination">
+            <div class="pagination-left">
+                <span id="requestsPaginationInfo">Показано 0 из 0</span>
+            </div>
+
+            <div class="pagination-center" id="requestsPagination"></div>
+
+            <div class="pagination-right">
+                <span class="pagination-size-label">На странице:</span>
+
+                <div class="page-size-selector">
+                    <button type="button"
+                            class="page-size-btn active"
+                            data-size="10">
+                        10
+                    </button>
+
+                    <button type="button"
+                            class="page-size-btn"
+                            data-size="20">
+                        20
+                    </button>
+
+                    <button type="button"
+                            class="page-size-btn"
+                            data-size="50">
+                        50
+                    </button>
+                </div>
+            </div>
         </div>
     </section>
 

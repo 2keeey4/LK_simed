@@ -36,6 +36,9 @@ namespace diplom_1.Pages.Requests
         public bool CanDelete { get; set; }
         public bool CanChangeStatus { get; set; }
 
+        public bool CanCreate { get; set; }
+        public bool CanReopenStatus { get; set; }
+
         public bool CanAddComments { get; set; }
         public bool CanEditComments { get; set; }
         public bool CanDeleteComments { get; set; }
@@ -65,6 +68,8 @@ namespace diplom_1.Pages.Requests
 
         public List<int> ChangeStatusOrgIds { get; set; } = new();
         public List<int> ChangeStatusBranchIds { get; set; } = new();
+        public List<int> CreateOrgIds { get; set; } = new();
+        public List<int> CreateBranchIds { get; set; } = new();
 
         public List<int> AddCommentOrgIds { get; set; } = new();
 
@@ -666,7 +671,7 @@ namespace diplom_1.Pages.Requests
 
             if (normalizedField == "status")
             {
-                if (!CanChangeStatus)
+                if (!CanChangeStatus && !CanReopenStatus)
                 {
                     return JsonFail("Нет права изменять статус этой заявки");
                 }
@@ -810,7 +815,7 @@ namespace diplom_1.Pages.Requests
 
             if (normalizedField == "status")
             {
-                if (!CanChangeStatus)
+                if (!CanChangeStatus && !CanReopenStatus)
                 {
                     return JsonFail("Нет права изменять статус этой заявки");
                 }
@@ -850,7 +855,11 @@ namespace diplom_1.Pages.Requests
                     break;
 
                 case "status":
-                    var allowedStatusNames = GetAllowedStatuses(request.RequestStatus?.Name);
+                    var allowedStatusNames = GetAllowedStatuses(
+    request.RequestStatus?.Name,
+    CanChangeStatus,
+    CanReopenStatus
+);
 
                     data = await _context.RequestStatuses
                         .Where(s => allowedStatusNames.Contains(s.Name))
@@ -963,6 +972,13 @@ namespace diplom_1.Pages.Requests
             CanDelete = CanDeleteRequestInScope(request);
             CanChangeStatus = CanChangeStatusInScope(request);
 
+            CanCreate = CanCreateRequestInScope(request);
+
+            var currentStatus = request.RequestStatus?.Name ?? "";
+            CanReopenStatus =
+                CanCreate &&
+                (currentStatus == "Завершена" || currentStatus == "Отменена");
+
             CanAddComments = CanAddCommentsInScope(request);
             CanEditComments = CanEditCommentsInScope(request);
             CanDeleteComments = CanDeleteCommentsInScope(request);
@@ -1019,6 +1035,9 @@ namespace diplom_1.Pages.Requests
 
             ChangeStatusOrgIds = GetOrgIds(taskPermissions, IsChangeStatusPermission);
             ChangeStatusBranchIds = GetBranchIds(taskPermissions, IsChangeStatusPermission);
+
+            CreateOrgIds = GetOrgIds(taskPermissions, IsCreateRequestPermission);
+            CreateBranchIds = GetBranchIds(taskPermissions, IsCreateRequestPermission);
 
             AddCommentOrgIds = GetOrgIds(taskPermissions, IsAddCommentPermission);
             AddCommentBranchIds = GetBranchIds(taskPermissions, IsAddCommentPermission);
@@ -1077,11 +1096,17 @@ namespace diplom_1.Pages.Requests
                 StringComparison.OrdinalIgnoreCase
             );
         }
+        private static bool ActionContains(UserPermission up, string actionPart)
+        {
+            return (up.Permission.Action ?? "")
+                .Contains(actionPart, StringComparison.OrdinalIgnoreCase);
+        }
 
         private static bool IsViewRequestPermission(UserPermission up) => ActionIs(up, "Просмотр");
         private static bool IsEditRequestPermission(UserPermission up) => ActionIs(up, "Редактирование");
         private static bool IsDeleteRequestPermission(UserPermission up) => ActionIs(up, "Удаление");
         private static bool IsChangeStatusPermission(UserPermission up) => ActionIs(up, "Изменение статуса");
+        private static bool IsCreateRequestPermission(UserPermission up) => ActionContains(up, "Добавление");
 
         private static bool IsAddCommentPermission(UserPermission up) => ActionIs(up, "Добавление внешних комментариев");
         private static bool IsEditCommentPermission(UserPermission up) => ActionIs(up, "Редактирование внешних комментариев");
@@ -1118,6 +1143,7 @@ namespace diplom_1.Pages.Requests
         private bool CanEditRequestInScope(Request request) => IsInScope(request, EditOrgIds, EditBranchIds);
         private bool CanDeleteRequestInScope(Request request) => IsInScope(request, DeleteOrgIds, DeleteBranchIds);
         private bool CanChangeStatusInScope(Request request) => IsInScope(request, ChangeStatusOrgIds, ChangeStatusBranchIds);
+        private bool CanCreateRequestInScope(Request request) => IsInScope(request, CreateOrgIds, CreateBranchIds);
 
         private bool CanAddCommentsInScope(Request request) => IsInScope(request, AddCommentOrgIds, AddCommentBranchIds);
         private bool CanEditCommentsInScope(Request request) => IsInScope(request, EditCommentOrgIds, EditCommentBranchIds);
@@ -1259,7 +1285,11 @@ namespace diplom_1.Pages.Requests
                 return FieldUpdateResult.Ok();
             }
 
-            var allowedStatuses = GetAllowedStatuses(currentStatus);
+            var allowedStatuses = GetAllowedStatuses(
+    currentStatus,
+    CanChangeStatus,
+    CanReopenStatus
+);
 
             if (!allowedStatuses.Contains(newStatus.Name))
             {
@@ -1272,46 +1302,95 @@ namespace diplom_1.Pages.Requests
             return FieldUpdateResult.Ok();
         }
 
-        private List<string> GetAllowedStatuses(string? currentStatus)
+        private List<string> GetAllowedStatuses(
+    string? currentStatus,
+    bool canChangeStatus,
+    bool canReopenStatus)
         {
             string status = currentStatus ?? "";
 
-            return status switch
+            if (canChangeStatus)
             {
-                "Создана" => new List<string>
-        {
-            "Создана",
-            "В работе",
-            "Отменена"
-        },
+                return status switch
+                {
+                    "Создана" => new List<string>
+            {
+                "Создана",
+                "В работе",
+                "Отменена"
+            },
 
-                "В работе" => new List<string>
-        {
-            "В работе",
-            "Завершена",
-            "Отменена"
-        },
+                    "В работе" => new List<string>
+            {
+                "В работе",
+                "Уточнение",
+                "Ожидание",
+                "Завершена",
+                "Отменена"
+            },
 
-                "Завершена" => new List<string>
-        {
-            "Завершена",
-            "В работе"
-        },
+                    "Уточнение" => new List<string>
+            {
+                "Уточнение",
+                "В работе",
+                "Ожидание",
+                "Отменена"
+            },
 
-                "Отменена" => new List<string>
-        {
-            "Отменена",
-            "В работе"
-        },
+                    "Ожидание" => new List<string>
+            {
+                "Ожидание",
+                "В работе",
+                "Уточнение",
+                "Отменена"
+            },
 
-                _ => new List<string>
-        {
-            "Создана",
-            "В работе",
-            "Завершена",
-            "Отменена"
-        }
-            };
+                    "Завершена" => new List<string>
+            {
+                "Завершена",
+                "Создана"
+            },
+
+                    "Отменена" => new List<string>
+            {
+                "Отменена",
+                "Создана"
+            },
+
+                    _ => new List<string>
+            {
+                status
+            }
+                };
+            }
+
+            if (canReopenStatus)
+            {
+                return status switch
+                {
+                    "Завершена" => new List<string>
+            {
+                "Завершена",
+                "Создана"
+            },
+
+                    "Отменена" => new List<string>
+            {
+                "Отменена",
+                "Создана"
+            },
+
+                    _ => new List<string>
+            {
+                status
+            }
+                };
+            }
+
+            return new List<string>
+    {
+        status
+    };
         }
 
         private async Task<FieldUpdateResult> UpdateOrganizationAsync(Request request, string value)

@@ -44,13 +44,14 @@ namespace diplom_1.Pages.Requests
 
         public int TotalCount { get; set; }
         public int CreatedCount { get; set; }
-        public int InWorkCount { get; set; }
-        public int DoneCount { get; set; }
-        public int CancelledCount { get; set; }
+        public int FinishedCount { get; set; }
+        public int CancelledPeriodCount { get; set; }
 
         public int CurrentTotalCount { get; set; }
         public int CurrentCreatedCount { get; set; }
         public int CurrentInWorkCount { get; set; }
+        public int CurrentClarificationCount { get; set; }
+        public int CurrentWaitingCount { get; set; }
         public int CurrentDoneCount { get; set; }
         public int CurrentCancelledCount { get; set; }
 
@@ -168,6 +169,8 @@ namespace diplom_1.Pages.Requests
             CurrentTotalCount = currentList.Count;
             CurrentCreatedCount = currentList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Создана");
             CurrentInWorkCount = currentList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "В работе");
+            CurrentClarificationCount = currentList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Уточнение");
+            CurrentWaitingCount = currentList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Ожидание");
             CurrentDoneCount = currentList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Завершена");
             CurrentCancelledCount = currentList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Отменена");
 
@@ -179,10 +182,9 @@ namespace diplom_1.Pages.Requests
                 .ToList();
 
             TotalCount = periodList.Count;
-            CreatedCount = periodList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Создана");
-            InWorkCount = periodList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "В работе");
-            DoneCount = periodList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Завершена");
-            CancelledCount = periodList.Count(r => r.RequestStatus != null && r.RequestStatus.Name == "Отменена");
+            CreatedCount = periodList.Count;
+            FinishedCount = CountStatusEvents(currentList, "Завершена", from, to);
+            CancelledPeriodCount = CountStatusEvents(currentList, "Отменена", from, to);
 
             Requests = periodList
                 .Select(r => new RequestDto
@@ -206,7 +208,10 @@ namespace diplom_1.Pages.Requests
 
                     ClientName = r.CreatedBy?.FullName ?? "-",
                     CreatedAt = r.CreatedAt,
-                    WorkHours = CalculateWorkHours(r.Id)
+                    FinishedAt = GetLatestStatusChangedAt(r.Id, "Завершена"),
+                    CancelledAt = GetLatestStatusChangedAt(r.Id, "Отменена"),
+                    WorkHours = CalculateWorkHours(r.Id),
+                    IsWorkHoursRunning = r.RequestStatus != null && r.RequestStatus.Name == "В работе"
                 })
                 .OrderByDescending(r => r.CreatedAt)
                 .ToList();
@@ -217,9 +222,9 @@ namespace diplom_1.Pages.Requests
                     OrgId = org.Id,
                     OrgName = org.Name,
                     LimitHours = org.WorkHoursLimit,
-                    SpentHours = Requests
+                    SpentHours = currentList
                         .Where(r => r.OrganizationId == org.Id)
-                        .Sum(r => r.WorkHours)
+                        .Sum(r => CalculateWorkHours(r.Id))
                 })
                 .ToList();
 
@@ -326,6 +331,44 @@ namespace diplom_1.Pages.Requests
                 .ToDictionary(x => x.organizationId, x => x.productIds);
         }
 
+        private int CountStatusEvents(
+            IEnumerable<Request> requests,
+            string statusName,
+            DateTime from,
+            DateTime to)
+        {
+            var requestIds = requests
+                .Select(r => r.Id)
+                .ToList();
+
+            if (!requestIds.Any())
+            {
+                return 0;
+            }
+
+            return _context.RequestStatusHistories
+                .Include(h => h.RequestStatus)
+                .Count(h =>
+                    requestIds.Contains(h.RequestId) &&
+                    h.RequestStatus != null &&
+                    h.RequestStatus.Name == statusName &&
+                    h.ChangedAt >= from &&
+                    h.ChangedAt <= to);
+        }
+
+        private DateTime? GetLatestStatusChangedAt(int requestId, string statusName)
+        {
+            return _context.RequestStatusHistories
+                .Include(h => h.RequestStatus)
+                .Where(h =>
+                    h.RequestId == requestId &&
+                    h.RequestStatus != null &&
+                    h.RequestStatus.Name == statusName)
+                .OrderByDescending(h => h.ChangedAt)
+                .Select(h => (DateTime?)h.ChangedAt)
+                .FirstOrDefault();
+        }
+
         private double CalculateWorkHours(int requestId)
         {
             var history = _context.RequestStatusHistories
@@ -339,26 +382,78 @@ namespace diplom_1.Pages.Requests
                 return 0;
             }
 
-            DateTime? start = null;
-            double sum = 0;
+            DateTime? workStartedAt = null;
+            double totalHours = 0;
 
-            foreach (var h in history)
+            foreach (var item in history)
             {
-                var statusName = h.RequestStatus?.Name ?? "";
+                var statusName = item.RequestStatus?.Name ?? "";
 
                 if (statusName == "В работе")
                 {
-                    start = h.ChangedAt;
+                    if (workStartedAt == null)
+                    {
+                        workStartedAt = item.ChangedAt;
+                    }
+
+                    continue;
                 }
-                else if ((statusName == "Завершена" || statusName == "Отменена") && start != null)
+
+                if (workStartedAt != null)
                 {
-                    sum += (h.ChangedAt - start.Value).TotalHours;
-                    start = null;
+                    totalHours += (item.ChangedAt - workStartedAt.Value).TotalHours;
+                    workStartedAt = null;
                 }
             }
 
-            return Math.Round(sum, 2);
+            if (workStartedAt != null)
+            {
+                totalHours += (DateTime.UtcNow - workStartedAt.Value).TotalHours;
+            }
+
+            return Math.Round(totalHours, 2);
         }
+
+        private double CalculateCompletedWorkHours(int requestId)
+        {
+            var history = _context.RequestStatusHistories
+                .Include(h => h.RequestStatus)
+                .Where(h => h.RequestId == requestId)
+                .OrderBy(h => h.ChangedAt)
+                .ToList();
+
+            if (history.Count == 0)
+            {
+                return 0;
+            }
+
+            DateTime? workStartedAt = null;
+            double totalHours = 0;
+
+            foreach (var item in history)
+            {
+                var statusName = item.RequestStatus?.Name ?? "";
+
+                if (statusName == "В работе")
+                {
+                    if (workStartedAt == null)
+                    {
+                        workStartedAt = item.ChangedAt;
+                    }
+
+                    continue;
+                }
+
+                if (workStartedAt != null)
+                {
+                    totalHours += (item.ChangedAt - workStartedAt.Value).TotalHours;
+                    workStartedAt = null;
+                }
+            }
+
+            return Math.Round(totalHours, 2);
+        }
+
 
         public async Task<IActionResult> OnPostCreateAsync()
         {
@@ -953,18 +1048,13 @@ namespace diplom_1.Pages.Requests
                 }
 
                 var accessibleRequests = await _context.Requests
-                    .Include(r => r.Organization)
-                    .Include(r => r.Branch)
                     .Include(r => r.Product)
                     .Include(r => r.RequestTopic)
                     .Include(r => r.RequestPriority)
                     .Include(r => r.RequestStatus)
                     .Where(r =>
                         r.RequestStatus != null &&
-                        (
-                            r.RequestStatus.Name == "Завершена" ||
-                            r.RequestStatus.Name == "Отменена"
-                        ))
+                        r.RequestStatus.Name == "Завершена")
                     .Where(r =>
                         r.CreatedById == uid ||
                         (r.OrganizationId != null && ViewOrgIds.Contains(r.OrganizationId.Value)) ||
@@ -980,17 +1070,9 @@ namespace diplom_1.Pages.Requests
                         BranchId = r.BranchId,
                         ProductId = r.ProductId,
                         Priority = r.RequestPriority?.Name ?? "",
-                        Hours = CalculateWorkHours(r.Id)
+                        Hours = CalculateCompletedWorkHours(r.Id)
                     })
                     .Where(x => x.Hours > 0)
-                    .ToList();
-
-                var exactSamples = samples
-                    .Where(x =>
-                        x.OrganizationId == organizationId &&
-                        x.ProductId == productId &&
-                        NormalizeText(x.Topic) == NormalizeText(topic) &&
-                        (!branchId.HasValue || x.BranchId == branchId.Value))
                     .ToList();
 
                 var productTopicSamples = samples
@@ -1003,54 +1085,34 @@ namespace diplom_1.Pages.Requests
                     .Where(x => NormalizeText(x.Topic) == NormalizeText(topic))
                     .ToList();
 
-                var productSamples = samples
-                    .Where(x => x.ProductId == productId)
-                    .ToList();
-
                 List<EstimateSampleDto> selectedSamples;
                 string source;
 
-                if (exactSamples.Count >= 3)
-                {
-                    selectedSamples = exactSamples;
-                    source = "exact";
-                }
-                else if (productTopicSamples.Count >= 3)
+                if (productTopicSamples.Any())
                 {
                     selectedSamples = productTopicSamples;
                     source = "productTopic";
                 }
-                else if (topicSamples.Count >= 3)
+                else if (topicSamples.Any())
                 {
                     selectedSamples = topicSamples;
                     source = "topic";
                 }
-                else if (productSamples.Count >= 3)
-                {
-                    selectedSamples = productSamples;
-                    source = "product";
-                }
                 else
                 {
-                    selectedSamples = samples;
-                    source = "common";
+                    selectedSamples = new List<EstimateSampleDto>();
+                    source = "base";
                 }
 
                 double baseHours = GetBaseHoursByTopic(topic);
-                double sampleAverage = selectedSamples.Count > 0
-                    ? GetTrimmedAverage(selectedSamples.Select(x => x.Hours).ToList())
+
+                double sampleAverage = selectedSamples.Any()
+                    ? selectedSamples.Average(x => x.Hours)
                     : baseHours;
 
-                double sampleWeight = GetSampleWeight(selectedSamples.Count, source);
-                double baseWeight = 1 - sampleWeight;
-
                 double priorityFactor = GetPriorityFactor(priority);
-                double descriptionFactor = GetDescriptionFactor(description);
 
-                double estimatedHours =
-                    ((sampleAverage * sampleWeight) + (baseHours * baseWeight))
-                    * priorityFactor
-                    * descriptionFactor;
+                double estimatedHours = sampleAverage * priorityFactor;
 
                 estimatedHours = Math.Clamp(estimatedHours, 0.5, 120);
                 estimatedHours = Math.Round(estimatedHours, 2);
@@ -1066,7 +1128,6 @@ namespace diplom_1.Pages.Requests
                         sampleCount = selectedSamples.Count,
                         confidence,
                         priorityFactor = Math.Round(priorityFactor, 2),
-                        descriptionFactor = Math.Round(descriptionFactor, 2),
                         baseHours = Math.Round(baseHours, 2),
                         sampleAverage = Math.Round(sampleAverage, 2),
                         source
@@ -1130,12 +1191,14 @@ namespace diplom_1.Pages.Requests
 
         private static double GetPriorityFactor(string priority)
         {
+            // В этой модели приоритет отражает срочность выполнения.
+            // Чем выше приоритет, тем меньше ожидаемое календарное время реакции/выполнения.
             return priority switch
             {
-                "Низкий" => 0.9,
+                "Критический" => 0.75,
+                "Высокий" => 0.9,
                 "Средний" => 1.0,
-                "Высокий" => 1.2,
-                "Критический" => 1.45,
+                "Низкий" => 1.15,
                 _ => 1.0
             };
         }
@@ -1196,12 +1259,17 @@ namespace diplom_1.Pages.Requests
 
         private static string GetConfidence(int sampleCount, string source)
         {
-            if (sampleCount >= 6 && (source == "exact" || source == "productTopic"))
+            if (source == "productTopic" && sampleCount >= 5)
             {
                 return "high";
             }
 
-            if (sampleCount >= 3 && source != "common")
+            if (source == "productTopic" && sampleCount >= 1)
+            {
+                return "medium";
+            }
+
+            if (source == "topic" && sampleCount >= 1)
             {
                 return "medium";
             }
@@ -1276,7 +1344,10 @@ namespace diplom_1.Pages.Requests
             public string Status { get; set; } = "";
             public string ClientName { get; set; } = "";
             public DateTime CreatedAt { get; set; }
+            public DateTime? FinishedAt { get; set; }
+            public DateTime? CancelledAt { get; set; }
             public double WorkHours { get; set; }
+            public bool IsWorkHoursRunning { get; set; }
         }
     }
 }

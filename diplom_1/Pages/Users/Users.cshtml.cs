@@ -9,6 +9,8 @@ using Microsoft.Extensions.Options;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
+using System;
+using System.Threading;
 
 namespace diplom_1.Pages.Users
 {
@@ -1196,12 +1198,16 @@ namespace diplom_1.Pages.Users
             try
             {
                 _logger.LogInformation("=== НАЧАЛО ОТПРАВКИ EMAIL ===");
-                _logger.LogInformation($"Email получателя: {email}");
-                _logger.LogInformation($"Логин: {login}");
+                _logger.LogInformation("Email получателя: {Email}", email);
+                _logger.LogInformation("Логин: {Login}", login);
 
                 var smtpSettings = _smtpSettings.Value;
 
-                _logger.LogInformation($"SMTP Host: {smtpSettings.Host}, Port: {smtpSettings.Port}");
+                _logger.LogInformation(
+                    "SMTP Host: {Host}, Port: {Port}",
+                    smtpSettings.Host,
+                    smtpSettings.Port
+                );
 
                 var message = new MimeMessage();
 
@@ -1228,26 +1234,45 @@ namespace diplom_1.Pages.Users
                 message.Body = bodyBuilder.ToMessageBody();
 
                 using var client = new SmtpClient();
+                using var smtpTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
 
+                client.Timeout = 8000;
                 client.ServerCertificateValidationCallback = (s, c, h, e) => true;
 
                 await client.ConnectAsync(
                     smtpSettings.Host,
                     smtpSettings.Port,
-                    SecureSocketOptions.SslOnConnect
+                    SecureSocketOptions.SslOnConnect,
+                    smtpTimeout.Token
                 );
 
-                await client.AuthenticateAsync(smtpSettings.Username, smtpSettings.Password);
-                await client.SendAsync(message);
-                await client.DisconnectAsync(true);
+                await client.AuthenticateAsync(
+                    smtpSettings.Username,
+                    smtpSettings.Password,
+                    smtpTimeout.Token
+                );
+
+                await client.SendAsync(message, smtpTimeout.Token);
+                await client.DisconnectAsync(true, smtpTimeout.Token);
 
                 _logger.LogInformation("=== ПИСЬМО УСПЕШНО ОТПРАВЛЕНО ===");
             }
+            catch (OperationCanceledException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Отправка письма с данными входа прервана по лимиту 8 секунд. Пользователь сохранён без ожидания письма."
+                );
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Ошибка отправки email: {ex.Message}");
+                _logger.LogError(
+                    ex,
+                    "Ошибка отправки письма с данными входа. Пользователь сохранён."
+                );
             }
         }
+
 
         private class ValidationResult
         {

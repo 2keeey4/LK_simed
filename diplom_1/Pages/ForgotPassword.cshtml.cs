@@ -12,6 +12,7 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Threading;
 
 namespace diplom_1.Pages
 {
@@ -62,8 +63,8 @@ namespace diplom_1.Pages
 
                 await SendEmailAsync(user.Email, resetLink);
 
-                Message = "Письмо отправлено на вашу почту.";
-                _logger.LogInformation("Email успешно отправлен на {Email}", user.Email);
+                Message = "Если email существует, письмо отправлено.";
+                _logger.LogInformation("Запрос восстановления пароля обработан для {Email}", user.Email);
             }
             catch (Exception ex)
             {
@@ -139,15 +140,48 @@ namespace diplom_1.Pages
 
             message.Body = bodyBuilder.ToMessageBody();
 
-            using (var client = new SmtpClient())
+            try
             {
+                using var client = new SmtpClient();
+                using var smtpTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+
+                client.Timeout = 8000;
                 client.ServerCertificateValidationCallback = (s, c, h, e) => true;
-                await client.ConnectAsync(_smtpSettings.Host, _smtpSettings.Port, SecureSocketOptions.SslOnConnect);
-                await client.AuthenticateAsync(_smtpSettings.Username, _smtpSettings.Password);
-                await client.SendAsync(message);
-                await client.DisconnectAsync(true);
+
+                await client.ConnectAsync(
+                    _smtpSettings.Host,
+                    _smtpSettings.Port,
+                    SecureSocketOptions.SslOnConnect,
+                    smtpTimeout.Token
+                );
+
+                await client.AuthenticateAsync(
+                    _smtpSettings.Username,
+                    _smtpSettings.Password,
+                    smtpTimeout.Token
+                );
+
+                await client.SendAsync(message, smtpTimeout.Token);
+                await client.DisconnectAsync(true, smtpTimeout.Token);
+
+                _logger.LogInformation("Email восстановления пароля успешно отправлен на {Email}", toEmail);
+            }
+            catch (OperationCanceledException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "SMTP отправка письма восстановления пароля прервана по лимиту 8 секунд. Токен восстановления уже создан."
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Ошибка SMTP отправки письма восстановления пароля. Токен восстановления уже создан."
+                );
             }
         }
+
 
         private string GenerateToken()
         {

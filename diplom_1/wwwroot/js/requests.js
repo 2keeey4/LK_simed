@@ -7,6 +7,9 @@ let statusPeriodChart = null;
 let estimateTimer = null;
 let estimateAbortController = null;
 
+let requestsCurrentPage = 1;
+let requestsPageSize = 10;
+
 document.addEventListener("DOMContentLoaded", () => {
     initFilterPanel();
     initDropdowns();
@@ -22,6 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initCustomSelects();
 
     initFilterCascading();
+    initRequestsPagination();
 
     setTimeout(() => {
         applyFilters(false);
@@ -400,9 +404,11 @@ function applyFilters(showMessage = true) {
             }
         }
 
-        row.style.display = visible ? "" : "none";
+        row.dataset.filteredVisible = visible ? "true" : "false";
     });
 
+    requestsCurrentPage = 1;
+    renderRequestsPage();
     updateAllAnalytics();
 
     if (showMessage) {
@@ -502,8 +508,175 @@ function getRowData(row) {
         status: cells[7]?.textContent.trim() || "",
         client: row.dataset.client || (hasClientColumn ? cells[cells.length - 2]?.textContent.trim() : ""),
         date: cells[cells.length - 1]?.textContent.trim() || "",
+        finishedDate: row.dataset.finishedDate || "",
+        cancelledDate: row.dataset.cancelledDate || "",
         hours: Number(row.dataset.workHours || 0)
     };
+}
+
+/* =========================
+   REQUESTS PAGINATION
+========================= */
+
+function initRequestsPagination() {
+
+    const savedSize = localStorage.getItem("requestsPageSize");
+
+    if (savedSize) {
+        requestsPageSize = Number(savedSize) || 10;
+    }
+
+    document
+        .querySelectorAll(".page-size-btn")
+        .forEach(button => {
+
+            const size = Number(button.dataset.size);
+
+            if (size === requestsPageSize) {
+                button.classList.add("active");
+            } else {
+                button.classList.remove("active");
+            }
+
+            button.addEventListener("click", () => {
+
+                requestsPageSize = size;
+
+                localStorage.setItem(
+                    "requestsPageSize",
+                    String(size)
+                );
+
+                document
+                    .querySelectorAll(".page-size-btn")
+                    .forEach(btn =>
+                        btn.classList.remove("active"));
+
+                button.classList.add("active");
+
+                requestsCurrentPage = 1;
+
+                renderRequestsPage();
+            });
+        });
+}
+
+function getFilteredRequestRows() {
+    return [...document.querySelectorAll("#requestsTable tbody tr")]
+        .filter(row => row.dataset.filteredVisible !== "false");
+}
+
+function renderRequestsPage() {
+    const allRows = [...document.querySelectorAll("#requestsTable tbody tr")];
+    const filteredRows = getFilteredRequestRows();
+
+    const totalItems = filteredRows.length;
+    const totalPages = Math.max(Math.ceil(totalItems / requestsPageSize), 1);
+
+    if (requestsCurrentPage > totalPages) {
+        requestsCurrentPage = totalPages;
+    }
+
+    if (requestsCurrentPage < 1) {
+        requestsCurrentPage = 1;
+    }
+
+    const startIndex = (requestsCurrentPage - 1) * requestsPageSize;
+    const endIndex = startIndex + requestsPageSize;
+    const rowsOnPage = new Set(filteredRows.slice(startIndex, endIndex));
+
+    allRows.forEach(row => {
+        row.style.display = rowsOnPage.has(row) ? "" : "none";
+    });
+
+    updateRequestsPaginationView(totalItems, totalPages);
+}
+
+function updateRequestsPaginationView(totalItems, totalPages) {
+    const container = document.getElementById("requestsPagination");
+    const info = document.getElementById("requestsPaginationInfo");
+
+    if (!container) {
+        return;
+    }
+
+    if (info) {
+        if (totalItems === 0) {
+            info.textContent = "Нет заявок для отображения";
+        } else {
+            const from = (requestsCurrentPage - 1) * requestsPageSize + 1;
+            const to = Math.min(requestsCurrentPage * requestsPageSize, totalItems);
+            info.textContent = `Показано ${from}–${to} из ${totalItems}`;
+        }
+    }
+
+    container.innerHTML = "";
+
+    const prevBtn = createPaginationButton("‹", requestsCurrentPage - 1, requestsCurrentPage === 1);
+    container.appendChild(prevBtn);
+
+    buildRequestsPageList(totalPages).forEach(page => {
+        if (page === "...") {
+            const dots = document.createElement("span");
+            dots.className = "pagination-dots";
+            dots.textContent = "…";
+            container.appendChild(dots);
+            return;
+        }
+
+        const btn = createPaginationButton(String(page), page, false);
+        btn.classList.toggle("active", page === requestsCurrentPage);
+        container.appendChild(btn);
+    });
+
+    const nextBtn = createPaginationButton("›", requestsCurrentPage + 1, requestsCurrentPage === totalPages);
+    container.appendChild(nextBtn);
+}
+
+function createPaginationButton(text, page, disabled) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "pagination-btn";
+    btn.textContent = text;
+    btn.disabled = disabled;
+
+    btn.addEventListener("click", () => {
+        if (disabled) {
+            return;
+        }
+
+        requestsCurrentPage = page;
+        renderRequestsPage();
+    });
+
+    return btn;
+}
+
+function buildRequestsPageList(totalPages) {
+    if (totalPages <= 7) {
+        return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const pages = [1];
+
+    if (requestsCurrentPage > 4) {
+        pages.push("...");
+    }
+
+    const start = Math.max(2, requestsCurrentPage - 1);
+    const end = Math.min(totalPages - 1, requestsCurrentPage + 1);
+
+    for (let page = start; page <= end; page++) {
+        pages.push(page);
+    }
+
+    if (requestsCurrentPage < totalPages - 3) {
+        pages.push("...");
+    }
+
+    pages.push(totalPages);
+
+    return pages;
 }
 
 /* =========================
@@ -544,23 +717,124 @@ function initAnalyticsToggle() {
 }
 
 function updateAllAnalytics() {
-    const rows = getVisibleRows();
+    const periodCreatedRows = getRowsByScope({
+        useDate: true,
+        useStatus: false
+    });
+    const periodEventRows = getRowsByScope({
+        useDate: false,
+        useStatus: false
+    });
+    const currentStatusRows = getRowsByScope({
+        useDate: false,
+        useStatus: true
+    });
+    const hoursRows = getRowsByScope({
+        useDate: false,
+        useStatus: false
+    });
 
-    updateCurrentStats(rows);
-    updateTrendChart(rows);
-    updateOrgChart(rows);
-    updateStatusPeriodChart(rows);
-    updateHoursTable(rows);
+    updateCurrentStats(currentStatusRows);
+    updateTrendChart(periodEventRows);
+    updateOrgChart(periodEventRows);
+    updateStatusPeriodChart(currentStatusRows);
+    updateHoursTable(hoursRows);
+}
+
+function getAllRequestRows() {
+    return [...document.querySelectorAll("#requestsTable tbody tr")];
 }
 
 function getVisibleRows() {
-    return [...document.querySelectorAll("#requestsTable tbody tr")]
-        .filter(row => row.style.display !== "none");
+    return getAllRequestRows()
+        .filter(row => row.dataset.filteredVisible !== "false");
+}
+
+function getRowsByScope(options = {}) {
+    const settings = {
+        useDate: options.useDate !== false,
+        useStatus: options.useStatus !== false
+    };
+
+    return getAllRequestRows()
+        .filter(row => rowMatchesFilters(row, settings));
+}
+
+function rowMatchesFilters(row, options = {}) {
+    const settings = {
+        useDate: options.useDate !== false,
+        useStatus: options.useStatus !== false
+    };
+
+    const filters = collectFilters();
+    const search = (document.getElementById("searchInput")?.value || "").trim().toLowerCase();
+
+    const orgNames = getSelectedNames(".filter-org");
+    const branchNames = getSelectedNames(".filter-branch");
+    const productNames = getSelectedNames(".filter-product");
+
+    const item = getRowData(row);
+
+    if (search) {
+        const searchArea = `${item.title} ${item.topic} ${item.org} ${item.branch} ${item.product} ${item.client}`.toLowerCase();
+
+        if (!searchArea.includes(search)) {
+            return false;
+        }
+    }
+
+    if (filters.orgs.length > 0 && !filters.orgs.some(id => item.org === orgNames[id])) {
+        return false;
+    }
+
+    if (filters.branches.length > 0 && !filters.branches.some(id => item.branch === branchNames[id])) {
+        return false;
+    }
+
+    if (filters.products.length > 0 && !filters.products.some(id => item.product === productNames[id])) {
+        return false;
+    }
+
+    if (settings.useStatus && filters.statuses.length > 0 && !filters.statuses.includes(item.status)) {
+        return false;
+    }
+
+    if (filters.clients.length > 0 && !filters.clients.includes(item.client)) {
+        return false;
+    }
+
+    if (settings.useDate && item.date) {
+        const currentDate = parseRuDate(item.date);
+
+        if (currentDate) {
+            if (filters.startDate) {
+                const start = new Date(filters.startDate);
+                start.setHours(0, 0, 0, 0);
+
+                if (currentDate < start) {
+                    return false;
+                }
+            }
+
+            if (filters.endDate) {
+                const end = new Date(filters.endDate);
+                end.setHours(23, 59, 59, 999);
+
+                if (currentDate > end) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
 }
 
 function updateCurrentStats(rows) {
     const created = rows.filter(row => getRowData(row).status === "Создана").length;
     const inWork = rows.filter(row => getRowData(row).status === "В работе").length;
+    const clarification = rows.filter(row => getRowData(row).status === "Уточнение").length;
+    const waiting = rows.filter(row => getRowData(row).status === "Ожидание").length;
 
     const currentCreated = document.getElementById("currentCreated");
     const currentInWork = document.getElementById("currentInWork");
@@ -568,7 +842,7 @@ function updateCurrentStats(rows) {
 
     if (currentCreated) currentCreated.textContent = created;
     if (currentInWork) currentInWork.textContent = inWork;
-    if (currentActive) currentActive.textContent = created + inWork;
+    if (currentActive) currentActive.textContent = created + inWork + clarification + waiting;
 }
 
 function updateTrendChart(rows) {
@@ -578,12 +852,7 @@ function updateTrendChart(rows) {
     const months = {};
     const monthNames = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
 
-    rows.forEach(row => {
-        const item = getRowData(row);
-        const date = parseRuDate(item.date);
-
-        if (!date) return;
-
+    function ensureMonth(date) {
         const monthNumber = String(date.getMonth() + 1).padStart(2, "0");
         const key = `${date.getFullYear()}-${monthNumber}`;
 
@@ -596,14 +865,25 @@ function updateTrendChart(rows) {
             };
         }
 
-        months[key].created++;
+        return months[key];
+    }
 
-        if (item.status === "Завершена") {
-            months[key].finished++;
+    rows.forEach(row => {
+        const item = getRowData(row);
+
+        const createdDate = parseRuDate(item.date);
+        if (createdDate && isDateInSelectedPeriod(createdDate)) {
+            ensureMonth(createdDate).created++;
         }
 
-        if (item.status === "Отменена") {
-            months[key].cancelled++;
+        const finishedDate = parseRuDate(item.finishedDate);
+        if (finishedDate && isDateInSelectedPeriod(finishedDate)) {
+            ensureMonth(finishedDate).finished++;
+        }
+
+        const cancelledDate = parseRuDate(item.cancelledDate);
+        if (cancelledDate && isDateInSelectedPeriod(cancelledDate)) {
+            ensureMonth(cancelledDate).cancelled++;
         }
     });
 
@@ -700,18 +980,12 @@ function updateOrgChart(rows) {
     const canvas = document.getElementById("orgChart");
     if (!canvas || typeof Chart === "undefined") return;
 
-    const orgs = {};
+    const orgs = buildOrganizationEventStatsFromItems(
+        rows.map(row => getRowData(row))
+    );
 
-    rows.forEach(row => {
-        const org = getRowData(row).org;
-
-        if (!org || org === "-") return;
-
-        orgs[org] = (orgs[org] || 0) + 1;
-    });
-
-    const data = Object.entries(orgs)
-        .sort((a, b) => b[1] - a[1])
+    const data = Object.values(orgs)
+        .sort((a, b) => b.created - a.created || b.finished - a.finished || a.org.localeCompare(b.org, "ru"))
         .slice(0, 8);
 
     if (orgChart) {
@@ -721,14 +995,28 @@ function updateOrgChart(rows) {
     orgChart = new Chart(canvas, {
         type: "bar",
         data: {
-            labels: data.map(x => x[0]),
+            labels: data.map(x => x.org),
             datasets: [
                 {
-                    label: "Заявок",
-                    data: data.map(x => x[1]),
-                    backgroundColor: "#8b5cf6",
+                    label: "Создано",
+                    data: data.map(x => x.created),
+                    backgroundColor: "#60a5fa",
                     borderRadius: 6,
-                    maxBarThickness: 34
+                    maxBarThickness: 26
+                },
+                {
+                    label: "Завершено",
+                    data: data.map(x => x.finished),
+                    backgroundColor: "#22c55e",
+                    borderRadius: 6,
+                    maxBarThickness: 26
+                },
+                {
+                    label: "Отменено",
+                    data: data.map(x => x.cancelled),
+                    backgroundColor: "#ef4444",
+                    borderRadius: 6,
+                    maxBarThickness: 26
                 }
             ]
         },
@@ -738,7 +1026,27 @@ function updateOrgChart(rows) {
             indexAxis: data.length > 4 ? "y" : "x",
             plugins: {
                 legend: {
-                    display: false
+                    position: "bottom",
+                    labels: {
+                        boxWidth: 10,
+                        boxHeight: 10,
+                        usePointStyle: true,
+                        font: {
+                            size: 11
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        footer: items => {
+                            const index = items?.[0]?.dataIndex;
+                            if (index === undefined || !data[index]) {
+                                return "";
+                            }
+
+                            return `Всего событий: ${data[index].created + data[index].finished + data[index].cancelled}`;
+                        }
+                    }
                 }
             },
             scales: {
@@ -765,18 +1073,87 @@ function updateOrgChart(rows) {
     });
 }
 
+
+function getStatusChartColor(status) {
+    const colors = {
+        "Создана": "#60a5fa",
+        "В работе": "#facc15",
+        "Уточнение": "#8b5cf6",
+        "Ожидание": "#0ea5e9",
+        "Завершена": "#22c55e",
+        "Отменена": "#ef4444"
+    };
+
+    return colors[status] || "#94a3b8";
+}
+
+function buildOrganizationEventStatsFromItems(items) {
+    const result = {};
+
+    function ensureOrg(name) {
+        if (!name || name === "-") {
+            return null;
+        }
+
+        if (!result[name]) {
+            result[name] = {
+                org: name,
+                created: 0,
+                finished: 0,
+                cancelled: 0
+            };
+        }
+
+        return result[name];
+    }
+
+    items.forEach(item => {
+        const org = ensureOrg(item.org);
+
+        if (!org) {
+            return;
+        }
+
+        const createdDate = parseRuDate(item.date);
+        if (createdDate && isDateInSelectedPeriod(createdDate)) {
+            org.created++;
+        }
+
+        const finishedDate = parseRuDate(item.finishedDate);
+        if (finishedDate && isDateInSelectedPeriod(finishedDate)) {
+            org.finished++;
+        }
+
+        const cancelledDate = parseRuDate(item.cancelledDate);
+        if (cancelledDate && isDateInSelectedPeriod(cancelledDate)) {
+            org.cancelled++;
+        }
+    });
+
+    return result;
+}
+
 function updateStatusPeriodChart(rows) {
     const canvas = document.getElementById("statusPeriodChart");
     const legend = document.getElementById("statusPeriodLegend");
 
     if (!canvas || typeof Chart === "undefined") return;
 
-    const data = {
-        "Создана": 0,
-        "В работе": 0,
-        "Завершена": 0,
-        "Отменена": 0
-    };
+    const allStatusNames = [
+        "Создана",
+        "В работе",
+        "Уточнение",
+        "Ожидание",
+        "Завершена",
+        "Отменена"
+    ];
+
+    const selectedStatuses = collectFilters().statuses;
+    const labels = selectedStatuses.length > 0
+        ? allStatusNames.filter(status => selectedStatuses.includes(status))
+        : allStatusNames;
+
+    const data = Object.fromEntries(labels.map(status => [status, 0]));
 
     rows.forEach(row => {
         const status = getRowData(row).status;
@@ -786,8 +1163,7 @@ function updateStatusPeriodChart(rows) {
         }
     });
 
-    const labels = Object.keys(data);
-    const values = Object.values(data);
+    const values = labels.map(label => data[label]);
 
     if (statusPeriodChart) {
         statusPeriodChart.destroy();
@@ -800,7 +1176,7 @@ function updateStatusPeriodChart(rows) {
             datasets: [
                 {
                     data: values,
-                    backgroundColor: ["#60a5fa", "#facc15", "#22c55e", "#ef4444"],
+                    backgroundColor: labels.map(label => getStatusChartColor(label)),
                     borderWidth: 0,
                     hoverOffset: 4
                 }
@@ -831,15 +1207,14 @@ function updateStatusPeriodChart(rows) {
 
     if (legend) {
         const total = values.reduce((a, b) => a + b, 0);
-        const colors = ["#60a5fa", "#facc15", "#22c55e", "#ef4444"];
 
-        legend.innerHTML = labels.map((label, index) => {
+        legend.innerHTML = labels.map(label => {
             const value = data[label];
             const percent = total > 0 ? Math.round((value / total) * 100) : 0;
 
             return `
                 <div class="status-legend-item">
-                    <span class="status-dot" style="background:${colors[index]}"></span>
+                    <span class="status-dot" style="background:${getStatusChartColor(label)}"></span>
                     <span>${escapeHtml(label)}</span>
                     <strong>${value}</strong>
                     <small>${percent}%</small>
@@ -849,7 +1224,7 @@ function updateStatusPeriodChart(rows) {
     }
 }
 
-function updateHoursTable() {
+function updateHoursTable(rows) {
     const container = document.getElementById("hoursTable");
 
     if (!container) return;
@@ -857,7 +1232,7 @@ function updateHoursTable() {
     const filters = collectFilters();
     const orgNames = getSelectedNames(".filter-org");
 
-    const allRows = [...document.querySelectorAll("#requestsTable tbody tr")];
+    const allRows = Array.isArray(rows) ? rows : getVisibleRows();
 
     const orgStats = {};
 
@@ -871,30 +1246,6 @@ function updateHoursTable() {
 
         if (include && filters.orgs.length > 0) {
             include = filters.orgs.some(id => item.org === orgNames[id]);
-        }
-
-        if (include && item.date) {
-            const currentDate = parseRuDate(item.date);
-
-            if (currentDate) {
-                if (filters.startDate) {
-                    const start = new Date(filters.startDate);
-                    start.setHours(0, 0, 0, 0);
-
-                    if (currentDate < start) {
-                        include = false;
-                    }
-                }
-
-                if (include && filters.endDate) {
-                    const end = new Date(filters.endDate);
-                    end.setHours(23, 59, 59, 999);
-
-                    if (currentDate > end) {
-                        include = false;
-                    }
-                }
-            }
         }
 
         if (!include) return;
@@ -939,7 +1290,7 @@ function updateHoursTable() {
         .sort((a, b) => a[0].localeCompare(b[0], "ru"));
 
     if (entries.length === 0) {
-        container.innerHTML = `<div class="text-muted">Нет данных по лимитам за выбранный период</div>`;
+        container.innerHTML = `<div class="text-muted">Нет данных по лимитам поддержки</div>`;
         return;
     }
 
@@ -1004,383 +1355,719 @@ function initReportExport() {
     }
 
     btn.addEventListener("click", () => {
-        const rows = getVisibleRows();
+        const rows = getAllRequestRows();
 
         if (rows.length === 0) {
             showToast("Нет данных для отчёта");
             return;
         }
 
-        openRequestsReport(rows);
+        openRequestsReport();
     });
 }
 
-function openRequestsReport(rows) {
-    const reportData = buildRequestsReportData(rows);
-    const reportWindow = window.open("", "_blank");
+function openRequestsReport() {
+    try {
+        const periodRows = getRowsByScope({
+            useDate: true,
+            useStatus: false
+        });
 
-    if (!reportWindow) {
-        showToast("Браузер заблокировал открытие отчёта");
-        return;
-    }
+        const eventRows = getRowsByScope({
+            useDate: false,
+            useStatus: false
+        });
 
-    reportWindow.document.open();
-    reportWindow.document.write(buildRequestsReportHtml(reportData));
-    reportWindow.document.close();
+        const currentStatusRows = getRowsByScope({
+            useDate: false,
+            useStatus: true
+        });
 
-    reportWindow.onload = () => {
+        const currentAllRows = getRowsByScope({
+            useDate: false,
+            useStatus: false
+        });
+
+        const hoursRows = getRowsByScope({
+            useDate: false,
+            useStatus: false
+        });
+
+        const reportData = buildRequestsReportData(
+            periodRows,
+            eventRows,
+            currentStatusRows,
+            currentAllRows,
+            hoursRows
+        );
+
+        const reportHtml = buildRequestsReportHtml(reportData);
+        const reportWindow = window.open("", "_blank");
+
+        if (!reportWindow) {
+            showToast("Браузер заблокировал открытие отчёта");
+            return;
+        }
+
+        reportWindow.document.open();
+        reportWindow.document.write(reportHtml);
+        reportWindow.document.close();
         reportWindow.focus();
-    };
+    } catch (error) {
+        console.error(error);
+        showToast("Не удалось сформировать отчёт");
+    }
 }
 
-function buildRequestsReportData(rows) {
-    const items = rows.map(row => getRowData(row));
+function buildRequestsReportData(
+    periodRows,
+    eventRows,
+    currentStatusRows,
+    currentAllRows,
+    hoursRows
+) {
+    const periodItems = periodRows.map(row => getRowData(row));
+    const eventItems = eventRows.map(row => getRowData(row));
+    const currentStatusItems = currentStatusRows.map(row => getRowData(row));
+    const currentAllItems = currentAllRows.map(row => getRowData(row));
+    const hoursItems = hoursRows.map(row => getRowData(row));
 
-    const total = items.length;
-    const statuses = countBy(items, item => item.status || "Не указан");
-    const priorities = countBy(items, item => item.priority || "Не указан");
-    const organizations = countBy(items, item => item.org || "Не указана");
-    const topics = countBy(items, item => item.topic || "Не указана");
-    const products = countBy(items, item => item.product || "Не указан");
+    const created = periodItems.length;
 
-    const totalHours = items.reduce((sum, item) => sum + Number(item.hours || 0), 0);
-    const completed = statuses["Завершена"] || 0;
-    const cancelled = statuses["Отменена"] || 0;
-    const active = (statuses["Создана"] || 0) + (statuses["В работе"] || 0);
+    const completed = eventItems.filter(item => {
+        const date = parseRuDate(item.finishedDate);
+        return date && isDateInSelectedPeriod(date);
+    }).length;
 
-    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-    const cancelRate = total > 0 ? Math.round((cancelled / total) * 100) : 0;
+    const cancelled = eventItems.filter(item => {
+        const date = parseRuDate(item.cancelledDate);
+        return date && isDateInSelectedPeriod(date);
+    }).length;
 
-    const monthly = buildMonthlyReportStats(items);
-    const orgHours = buildOrganizationHoursReportStats(items);
+    const closed = completed + cancelled;
+
+    const currentStatuses = countBy(currentStatusItems, item => item.status || "Не указан");
+    const currentAllStatuses = countBy(currentAllItems, item => item.status || "Не указан");
+
+    const priorities = countBy(periodItems, item => item.priority || "Не указан");
+    const topics = countBy(periodItems, item => item.topic || "Не указана");
+    const products = countBy(periodItems, item => item.product || "Не указан");
+
+    const organizationEvents = Object.values(
+        buildOrganizationEventStatsFromItems(eventItems)
+    );
+
+    const currentTotal = currentStatusItems.length;
+    const currentCreated = currentStatuses["Создана"] || 0;
+    const currentInWork = currentStatuses["В работе"] || 0;
+    const currentClarification = currentStatuses["Уточнение"] || 0;
+    const currentWaiting = currentStatuses["Ожидание"] || 0;
+    const currentCompleted = currentStatuses["Завершена"] || 0;
+    const currentCancelled = currentStatuses["Отменена"] || 0;
+    const currentActive = currentCreated + currentInWork + currentClarification + currentWaiting;
+
+    const currentAllTotal = currentAllItems.length;
+    const currentAllCreated = currentAllStatuses["Создана"] || 0;
+    const currentAllProcessed = Math.max(currentAllTotal - currentAllCreated, 0);
+
+    const completionRate = created > 0
+        ? Math.round((completed / created) * 100)
+        : 0;
+
+    const cancelRate = created > 0
+        ? Math.round((cancelled / created) * 100)
+        : 0;
+
+    const sliExecution = closed > 0
+        ? Math.round((completed / closed) * 100)
+        : null;
+
+    const sliProcessing = currentAllTotal > 0
+        ? Math.round((currentAllProcessed / currentAllTotal) * 100)
+        : null;
+
+    const monthly = buildMonthlyReportStats(eventItems);
+    const orgHours = buildOrganizationHoursReportStats(hoursItems);
+
+    const orgsWithLimit = orgHours.filter(item => Number(item.limit || 0) > 0);
+    const orgsWithoutLimitExcess = orgsWithLimit.filter(item =>
+        Number(item.spent || 0) <= Number(item.limit || 0)
+    );
+
+    const sliLimits = orgsWithLimit.length > 0
+        ? Math.round((orgsWithoutLimitExcess.length / orgsWithLimit.length) * 100)
+        : null;
 
     return {
         generatedAt: new Date(),
         periodText: getReportPeriodText(),
-        filtersText: getReportFiltersText(),
-        items,
-        total,
-        totalHours,
-        active,
+        commonFiltersText: getReportFiltersText(false),
+        statusFiltersText: getReportStatusFiltersText(),
+
+        periodItems,
+        eventItems,
+        currentStatusItems,
+        currentAllItems,
+        hoursItems,
+
+        created,
         completed,
         cancelled,
+        closed,
         completionRate,
         cancelRate,
-        statuses,
+
+        currentTotal,
+        currentCreated,
+        currentInWork,
+        currentClarification,
+        currentWaiting,
+        currentActive,
+        currentCompleted,
+        currentCancelled,
+
+        currentAllTotal,
+        currentAllCreated,
+        currentAllProcessed,
+
+        currentStatuses,
         priorities,
-        organizations,
         topics,
         products,
+        organizationEvents,
         monthly,
-        orgHours
+        orgHours,
+        orgsWithLimitCount: orgsWithLimit.length,
+        orgsWithoutLimitExcessCount: orgsWithoutLimitExcess.length,
+
+        sliExecution,
+        sliProcessing,
+        sliLimits
     };
 }
 
 function buildRequestsReportHtml(data) {
-    const topOrganizations = toSortedEntries(data.organizations).slice(0, 8);
+    const topOrganizations = data.organizationEvents
+        .slice()
+        .sort((a, b) =>
+            b.created - a.created ||
+            b.finished - a.finished ||
+            b.cancelled - a.cancelled ||
+            a.org.localeCompare(b.org, "ru")
+        )
+        .slice(0, 10);
+
     const topTopics = toSortedEntries(data.topics).slice(0, 8);
     const topProducts = toSortedEntries(data.products).slice(0, 8);
-    const statusEntries = toSortedEntries(data.statuses);
     const priorityEntries = toSortedEntries(data.priorities);
+    const statusEntries = orderedStatusEntries(data.currentStatuses);
 
     return `
 <!doctype html>
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>Отчёт по заявкам</title>
+    <title>Статистический отчёт по заявкам</title>
+
     <style>
+        @page {
+            size: A4 portrait;
+            margin: 14mm;
+        }
+
         * {
             box-sizing: border-box;
         }
 
         body {
             margin: 0;
-            background: #f8fafc;
-            color: #0f172a;
-            font-family: "Segoe UI", Arial, sans-serif;
+            background: #ffffff;
+            color: #111827;
+            font-family: "Times New Roman", Times, serif;
             font-size: 13px;
+            line-height: 1.35;
         }
 
         .report-page {
-            max-width: 1180px;
+            width: 100%;
+            max-width: 190mm;
             margin: 0 auto;
-            padding: 24px;
-        }
-
-        .report-header {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-            align-items: flex-start;
-            margin-bottom: 18px;
-            padding: 20px;
-            border: 1px solid #e2e8f0;
-            border-radius: 18px;
-            background: #ffffff;
-        }
-
-        .report-title {
-            margin: 0 0 8px;
-            font-size: 24px;
-            line-height: 1.15;
-            letter-spacing: -0.03em;
-        }
-
-        .report-meta {
-            color: #64748b;
-            line-height: 1.5;
         }
 
         .report-actions {
             display: flex;
-            gap: 8px;
+            justify-content: flex-end;
+            margin-bottom: 14px;
+            font-family: "Segoe UI", Arial, sans-serif;
         }
 
         .report-btn {
-            border: 1px solid #2563eb;
-            border-radius: 10px;
-            background: #2563eb;
+            border: 1px solid #111827;
+            border-radius: 4px;
+            background: #111827;
             color: #ffffff;
-            padding: 9px 14px;
-            font-weight: 650;
+            padding: 7px 13px;
+            font-size: 13px;
+            font-weight: 600;
             cursor: pointer;
         }
 
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(6, minmax(0, 1fr));
-            gap: 10px;
-            margin-bottom: 16px;
+        .report-header {
+            margin-bottom: 15px;
+            padding-bottom: 11px;
+            border-bottom: 2px solid #111827;
         }
 
-        .summary-card {
-            border: 1px solid #e2e8f0;
-            border-radius: 15px;
-            background: #ffffff;
-            padding: 14px;
+        .report-title {
+            margin: 0 0 12px;
+            text-align: center;
+            font-size: 21px;
+            line-height: 1.2;
+            font-weight: 700;
         }
 
-        .summary-value {
-            font-size: 25px;
-            font-weight: 750;
-            line-height: 1;
-            letter-spacing: -0.04em;
+        .report-meta {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12.5px;
         }
 
-        .summary-label {
-            margin-top: 7px;
-            color: #64748b;
+        .report-meta td {
+            padding: 3px 0;
+            vertical-align: top;
+        }
+
+        .report-meta td:first-child {
+            width: 44mm;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .report-note {
+            margin-top: 8px;
+            padding: 7px 9px;
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            color: #374151;
             font-size: 12px;
-            font-weight: 600;
         }
 
-        .report-grid {
-            display: grid;
-            grid-template-columns: repeat(12, minmax(0, 1fr));
-            gap: 14px;
-            margin-bottom: 16px;
+        .report-section {
+            margin-top: 15px;
         }
 
-        .report-card {
-            border: 1px solid #e2e8f0;
-            border-radius: 16px;
-            background: #ffffff;
-            padding: 16px;
+        .report-section.compact-section,
+        .chart-card,
+        .kpi-grid,
+        .report-table {
+            page-break-inside: avoid;
             break-inside: avoid;
         }
 
-        .span-12 { grid-column: span 12; }
-        .span-8 { grid-column: span 8; }
-        .span-6 { grid-column: span 6; }
-        .span-4 { grid-column: span 4; }
-
-        .report-card h2 {
-            margin: 0 0 12px;
-            font-size: 15px;
-            color: #334155;
-        }
-
-        .bar-list {
-            display: grid;
-            gap: 9px;
-        }
-
-        .bar-row {
-            display: grid;
-            grid-template-columns: minmax(120px, 1fr) 3fr 44px;
-            gap: 9px;
-            align-items: center;
-        }
-
-        .bar-label {
-            overflow: hidden;
-            color: #475569;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-        }
-
-        .bar-track {
-            height: 9px;
-            overflow: hidden;
-            border-radius: 999px;
-            background: #e2e8f0;
-        }
-
-        .bar-fill {
-            height: 100%;
-            border-radius: 999px;
-            background: #2563eb;
-        }
-
-        .bar-value {
-            text-align: right;
-            color: #0f172a;
+        .report-section-title {
+            margin: 0 0 9px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #9ca3af;
+            font-size: 16px;
             font-weight: 700;
+        }
+
+        .section-subtitle {
+            margin: -4px 0 9px;
+            color: #4b5563;
+            font-size: 12px;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .kpi-card {
+            min-height: 56px;
+            border: 1px solid #d1d5db;
+            padding: 8px 9px;
+            background: #ffffff;
+        }
+
+        .kpi-label {
+            margin-bottom: 5px;
+            color: #4b5563;
+            font-size: 11.5px;
+            line-height: 1.25;
+        }
+
+        .kpi-value {
+            color: #111827;
+            font-size: 20px;
+            line-height: 1;
+            font-weight: 700;
+        }
+
+        .summary-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 170px;
+            gap: 12px;
+            align-items: start;
         }
 
         .report-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 12px;
+            font-size: 12.3px;
         }
 
         .report-table th,
         .report-table td {
-            border-bottom: 1px solid #e2e8f0;
-            padding: 8px 9px;
-            text-align: left;
+            border: 1px solid #d1d5db;
+            padding: 5px 7px;
             vertical-align: top;
         }
 
         .report-table th {
-            background: #f8fafc;
-            color: #64748b;
-            font-size: 11px;
-            font-weight: 750;
+            background: #f3f4f6;
+            font-weight: 700;
+            text-align: left;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
 
-        .report-table td {
-            color: #334155;
+        .report-table td.numeric,
+        .report-table th.numeric {
+            text-align: right;
+            white-space: nowrap;
         }
 
-        .status-pill {
-            display: inline-flex;
-            border-radius: 999px;
-            background: #eff6ff;
-            padding: 4px 8px;
-            color: #1d4ed8;
-            font-size: 11px;
+        .summary-table td:first-child {
+            width: 72%;
+        }
+
+        .summary-table td:last-child {
+            width: 28%;
+            text-align: right;
             font-weight: 700;
             white-space: nowrap;
         }
 
-        .insight-list {
+        .chart-card {
+            border: 1px solid #d1d5db;
+            padding: 9px;
+        }
+
+        .chart-card-title {
+            margin: 0 0 7px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .chart-wide {
+            width: 100%;
+        }
+
+        .mini-bars {
+            display: grid;
+            gap: 6px;
+        }
+
+        .mini-bar-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 36px 42px;
+            gap: 7px;
+            align-items: center;
+            font-size: 12px;
+        }
+
+        .mini-bar-label {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .mini-bar-value,
+        .mini-bar-percent {
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .mini-bar-track {
+            grid-column: 1 / 4;
+            height: 7px;
+            border: 1px solid #9ca3af;
+            background: #ffffff;
+            border-radius: 999px;
+            overflow: hidden;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .mini-bar-fill {
+            height: 100%;
+            background: #4b5563;
+            border-radius: 999px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .donut-layout {
             display: grid;
             gap: 8px;
-            margin: 0;
-            padding-left: 18px;
-            color: #334155;
-            line-height: 1.45;
+            justify-items: center;
+            align-items: center;
+        }
+
+        .donut-svg {
+            width: 118px;
+            height: 118px;
+        }
+
+        .donut-center-text {
+            font-family: "Segoe UI", Arial, sans-serif;
+            font-size: 10px;
+            font-weight: 700;
+            fill: #111827;
+        }
+
+        .legend-list {
+            width: 100%;
+            display: grid;
+            gap: 5px;
+            font-size: 11.5px;
+        }
+
+        .legend-item {
+            display: grid;
+            grid-template-columns: 9px minmax(0, 1fr) auto;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: #4b5563;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .legend-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .legend-value {
+            white-space: nowrap;
+            font-weight: 700;
+        }
+
+        .svg-chart {
+            width: 100%;
+            height: auto;
+            max-height: 205px;
+        }
+
+        .svg-axis-text {
+            font-family: "Times New Roman", Times, serif;
+            font-size: 10.5px;
+            fill: #374151;
+        }
+
+        .svg-grid {
+            stroke: #e5e7eb;
+            stroke-width: 1;
+        }
+
+        .svg-bar-created {
+            fill: #374151;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .svg-bar-finished {
+            fill: #6b7280;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .svg-bar-cancelled {
+            fill: #9ca3af;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .chart-legend {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin: 5px 0 7px;
+            color: #374151;
+            font-size: 11.5px;
+        }
+
+        .chart-legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .legend-square {
+            width: 9px;
+            height: 9px;
+            display: inline-block;
+            background: #374151;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .legend-square.finished {
+            background: #6b7280;
+        }
+
+        .legend-square.cancelled {
+            background: #9ca3af;
         }
 
         .muted {
-            color: #64748b;
+            color: #4b5563;
+        }
+
+        .conclusion-text {
+            margin: 0 0 7px;
+            text-align: justify;
+        }
+
+        .report-footer-note {
+            margin-top: 7px;
+            color: #4b5563;
+            font-size: 12px;
         }
 
         @media print {
-            body {
-                background: #ffffff;
+            .report-actions {
+                display: none !important;
             }
 
             .report-page {
                 max-width: none;
-                padding: 0;
+                margin: 0;
             }
 
-            .report-actions {
-                display: none;
-            }
-
-            .report-card,
-            .summary-card,
-            .report-header {
-                box-shadow: none;
+            tr,
+            .kpi-card,
+            .chart-card {
+                page-break-inside: avoid;
+                break-inside: avoid;
             }
         }
     </style>
 </head>
+
 <body>
     <div class="report-page">
-        <header class="report-header">
-            <div>
-                <h1 class="report-title">Статистический отчёт по заявкам</h1>
-                <div class="report-meta">
-                    <div><strong>Период:</strong> ${escapeHtml(data.periodText)}</div>
-                    <div><strong>Фильтры:</strong> ${escapeHtml(data.filtersText)}</div>
-                    <div><strong>Сформирован:</strong> ${escapeHtml(formatDateTime(data.generatedAt))}</div>
-                </div>
-            </div>
+        <div class="report-actions">
+            <button class="report-btn" onclick="window.print()">Печать / PDF</button>
+        </div>
 
-            <div class="report-actions">
-                <button class="report-btn" onclick="window.print()">Печать / PDF</button>
+        <header class="report-header">
+            <h1 class="report-title">Статистический отчёт по заявкам</h1>
+
+            <table class="report-meta">
+                <tbody>
+                    <tr>
+                        <td>Период событий:</td>
+                        <td>${escapeHtml(data.periodText)}</td>
+                    </tr>
+                    <tr>
+                        <td>Основные фильтры:</td>
+                        <td>${escapeHtml(data.commonFiltersText)}</td>
+                    </tr>
+                    <tr>
+                        <td>Фильтр статусов:</td>
+                        <td>${escapeHtml(data.statusFiltersText)}</td>
+                    </tr>
+                    <tr>
+                        <td>Дата формирования:</td>
+                        <td>${escapeHtml(formatDateTime(data.generatedAt))}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="report-note">
+                Показатели за период рассчитываются по событиям создания, завершения и отмены заявок. Показатели на дату формирования отражают текущее состояние заявок и использование лимитов поддержки.
             </div>
         </header>
 
-        <section class="summary-grid">
-            ${summaryCard("Всего заявок", data.total)}
-            ${summaryCard("Активные", data.active)}
-            ${summaryCard("Завершены", data.completed)}
-            ${summaryCard("Отменены", data.cancelled)}
-            ${summaryCard("Завершение", `${data.completionRate}%`)}
-            ${summaryCard("Трудозатраты", formatHours(data.totalHours))}
+        <section class="report-section compact-section">
+            <h2 class="report-section-title">1. Ключевые показатели за период</h2>
+            ${renderPeriodKpiCards(data)}
+            ${renderPeriodSummaryTable(data)}
         </section>
 
-        <section class="report-grid">
-            <div class="report-card span-8">
-                <h2>Динамика заявок по месяцам</h2>
-                ${renderMonthlyChart(data.monthly)}
-            </div>
+        <section class="report-section compact-section">
+            <h2 class="report-section-title">2. Показатели SLI</h2>
+            ${renderSliTable(data)}
+        </section>
 
-            <div class="report-card span-4">
-                <h2>Распределение по статусам</h2>
-                ${renderBarList(statusEntries, data.total)}
-            </div>
+        <section class="report-section compact-section">
+            <h2 class="report-section-title">3. Состояние заявок на дату формирования</h2>
+            <div class="summary-layout">
+                ${renderCurrentStatusTable(data)}
 
-            <div class="report-card span-6">
-                <h2>Топ организаций по количеству заявок</h2>
-                ${renderBarList(topOrganizations, data.total)}
+                <div class="chart-card">
+                    <h3 class="chart-card-title">Статусы</h3>
+                    ${renderStatusDonut(statusEntries, data.currentTotal)}
+                </div>
             </div>
+        </section>
 
-            <div class="report-card span-6">
-                <h2>Топ тем обращений</h2>
-                ${renderBarList(topTopics, data.total)}
-            </div>
+        <section class="report-section compact-section">
+            <h2 class="report-section-title">4. Динамика событий по месяцам</h2>
+            ${renderMonthlyChart(data.monthly)}
+        </section>
 
-            <div class="report-card span-6">
-                <h2>Распределение по приоритетам</h2>
-                ${renderBarList(priorityEntries, data.total)}
-            </div>
+        <section class="report-section">
+            <h2 class="report-section-title">5. Структура обращений за период</h2>
 
-            <div class="report-card span-6">
-                <h2>Топ продуктов</h2>
-                ${renderBarList(topProducts, data.total)}
-            </div>
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3 class="chart-card-title">События по организациям</h3>
+                    ${renderOrganizationEventsTable(topOrganizations)}
+                </div>
 
-            <div class="report-card span-12">
-                <h2>Контроль лимита часов по организациям</h2>
-                ${renderOrgHoursTable(data.orgHours)}
-            </div>
+                <div class="chart-card">
+                    <h3 class="chart-card-title">Тематики обращений</h3>
+                    ${renderCompactBarChart(topTopics, data.created)}
+                </div>
 
-            <div class="report-card span-12">
-                <h2>Краткие выводы</h2>
-                ${renderInsights(data, topOrganizations, topTopics)}
-            </div>
+                <div class="chart-card">
+                    <h3 class="chart-card-title">Приоритеты заявок</h3>
+                    ${renderCompactBarChart(priorityEntries, data.created)}
+                </div>
 
-            <div class="report-card span-12">
-                <h2>Реестр заявок, попавших в отчёт</h2>
-                ${renderRequestsReportTable(data.items)}
+                <div class="chart-card">
+                    <h3 class="chart-card-title">Программные продукты</h3>
+                    ${renderCompactBarChart(topProducts, data.created)}
+                </div>
             </div>
+        </section>
+
+        <section class="report-section">
+            <h2 class="report-section-title">6. Контроль использования лимитов поддержки на дату формирования</h2>
+            ${renderOrgHoursTable(data.orgHours)}
+        </section>
+
+        <section class="report-section compact-section">
+            <h2 class="report-section-title">7. Выводы</h2>
+            ${renderInsights(data, topOrganizations, topTopics)}
         </section>
     </div>
 </body>
@@ -1388,38 +2075,220 @@ function buildRequestsReportHtml(data) {
     `;
 }
 
-function summaryCard(label, value) {
+function renderPeriodKpiCards(data) {
     return `
-        <div class="summary-card">
-            <div class="summary-value">${escapeHtml(value)}</div>
-            <div class="summary-label">${escapeHtml(label)}</div>
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-label">Создано</div>
+                <div class="kpi-value">${data.created}</div>
+            </div>
+
+            <div class="kpi-card">
+                <div class="kpi-label">Завершено</div>
+                <div class="kpi-value">${data.completed}</div>
+            </div>
+
+            <div class="kpi-card">
+                <div class="kpi-label">Отменено</div>
+                <div class="kpi-value">${data.cancelled}</div>
+            </div>
+
+            <div class="kpi-card">
+                <div class="kpi-label">Закрыто</div>
+                <div class="kpi-value">${data.closed}</div>
+            </div>
         </div>
     `;
 }
 
-function renderBarList(entries, total) {
+function renderPeriodSummaryTable(data) {
+    return `
+        <table class="report-table summary-table">
+            <tbody>
+                <tr>
+                    <td>Доля завершённых заявок от количества созданных за период</td>
+                    <td>${data.completionRate}%</td>
+                </tr>
+                <tr>
+                    <td>Доля отменённых заявок от количества созданных за период</td>
+                    <td>${data.cancelRate}%</td>
+                </tr>
+                <tr>
+                    <td>Количество закрытых заявок за период</td>
+                    <td>${data.closed}</td>
+                </tr>
+            </tbody>
+        </table>
+    `;
+}
+
+function renderSliTable(data) {
+    const executionValue = data.sliExecution === null
+        ? "—"
+        : `${data.sliExecution}%`;
+
+    const processingValue = data.sliProcessing === null
+        ? "—"
+        : `${data.sliProcessing}%`;
+
+    const limitsValue = data.sliLimits === null
+        ? "—"
+        : `${data.sliLimits}%`;
+
+    return `
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>Показатель</th>
+                    <th>Период расчёта</th>
+                    <th>Назначение</th>
+                    <th>Расчёт</th>
+                    <th class="numeric">Значение</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>SLI выполнения заявок</td>
+                    <td>За выбранный период</td>
+                    <td>Доля заявок, закрытых успешным выполнением</td>
+                    <td>Завершено / (Завершено + Отменено) × 100%</td>
+                    <td class="numeric">${executionValue}</td>
+                </tr>
+                <tr>
+                    <td>SLI обработки обращений</td>
+                    <td>На дату формирования</td>
+                    <td>Доля заявок, которые перешли из первичного статуса в обработку или закрытие</td>
+                    <td>Обработано / Всего заявок на дату × 100%</td>
+                    <td class="numeric">${processingValue}</td>
+                </tr>
+                <tr>
+                    <td>SLI соблюдения лимитов поддержки</td>
+                    <td>На дату формирования</td>
+                    <td>Доля организаций без превышения установленного лимита часов</td>
+                    <td>Организации без превышения / Организации с лимитом × 100%</td>
+                    <td class="numeric">${limitsValue}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="report-footer-note">
+            SLI отражают фактические количественные показатели качества сервиса. В отчёте отдельно указано, какие показатели рассчитываются за период, а какие — на дату формирования.
+        </div>
+    `;
+}
+
+function renderCurrentStatusTable(data) {
+    const statusRows = orderedStatusEntries(data.currentStatuses)
+        .map(([status, value]) => `
+                <tr>
+                    <td>${escapeHtml(status)}</td>
+                    <td>${value}</td>
+                </tr>
+        `)
+        .join("");
+
+    return `
+        <table class="report-table summary-table">
+            <tbody>
+                <tr>
+                    <td>Всего заявок по выбранным статусам</td>
+                    <td>${data.currentTotal}</td>
+                </tr>
+                <tr>
+                    <td>Активные заявки по выбранным статусам</td>
+                    <td>${data.currentActive}</td>
+                </tr>
+                ${statusRows}
+            </tbody>
+        </table>
+    `;
+}
+
+function renderCompactBarChart(entries, total) {
     if (!entries.length) {
-        return `<div class="muted">Нет данных</div>`;
+        return `<div class="muted">Нет данных для отображения</div>`;
     }
 
     const max = Math.max(...entries.map(x => x[1]), 1);
 
     return `
-        <div class="bar-list">
+        <div class="mini-bars">
             ${entries.map(([label, value]) => {
-        const width = Math.round((value / max) * 100);
         const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+        const width = Math.round((value / max) * 100);
 
         return `
-                    <div class="bar-row">
-                        <div class="bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
-                        <div class="bar-track">
-                            <div class="bar-fill" style="width:${width}%"></div>
+                    <div class="mini-bar-row">
+                        <div class="mini-bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+                        <div class="mini-bar-value">${value}</div>
+                        <div class="mini-bar-percent">${percent}%</div>
+                        <div class="mini-bar-track">
+                            <div class="mini-bar-fill" style="width:${width}%"></div>
                         </div>
-                        <div class="bar-value">${value} / ${percent}%</div>
                     </div>
                 `;
     }).join("")}
+        </div>
+    `;
+}
+
+function renderStatusDonut(entries, total) {
+    if (!entries.length || total === 0) {
+        return `<div class="muted">Нет данных для отображения</div>`;
+    }
+
+    const colors = ["#4b5563", "#6b7280", "#9ca3af", "#d1d5db", "#e5e7eb", "#f3f4f6"];
+    const radius = 40;
+    const circumference = 2 * Math.PI * radius;
+
+    let offset = 0;
+
+    const circles = entries.map(([label, value], index) => {
+        const part = total > 0 ? value / total : 0;
+        const dash = part * circumference;
+        const color = colors[index % colors.length];
+
+        const circle = `
+            <circle
+                cx="60"
+                cy="60"
+                r="${radius}"
+                fill="transparent"
+                stroke="${color}"
+                stroke-width="16"
+                stroke-dasharray="${dash} ${circumference - dash}"
+                stroke-dashoffset="${-offset}"
+                transform="rotate(-90 60 60)">
+            </circle>
+        `;
+
+        offset += dash;
+        return circle;
+    }).join("");
+
+    return `
+        <div class="donut-layout">
+            <svg class="donut-svg" viewBox="0 0 120 120" role="img" aria-label="Диаграмма статусов">
+                <circle cx="60" cy="60" r="${radius}" fill="transparent" stroke="#f3f4f6" stroke-width="16"></circle>
+                ${circles}
+                <text x="60" y="57" text-anchor="middle" class="donut-center-text">${total}</text>
+                <text x="60" y="71" text-anchor="middle" class="donut-center-text">заявок</text>
+            </svg>
+
+            <div class="legend-list">
+                ${entries.map(([label, value], index) => {
+        const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+        const color = colors[index % colors.length];
+
+        return `
+                        <div class="legend-item">
+                            <span class="legend-dot" style="background:${color}"></span>
+                            <span class="legend-name" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+                            <span class="legend-value">${value} / ${percent}%</span>
+                        </div>
+                    `;
+    }).join("")}
+            </div>
         </div>
     `;
 }
@@ -1429,34 +2298,121 @@ function renderMonthlyChart(monthly) {
         return `<div class="muted">Нет данных для построения динамики</div>`;
     }
 
+    const width = 720;
+    const height = 200;
+    const left = 46;
+    const right = 14;
+    const top = 16;
+    const bottom = 42;
+
+    const chartWidth = width - left - right;
+    const chartHeight = height - top - bottom;
+
     const max = Math.max(
         ...monthly.map(item => Math.max(item.created, item.finished, item.cancelled)),
         1
     );
 
+    const groupWidth = chartWidth / monthly.length;
+    const barWidth = Math.min(12, Math.max(6, groupWidth * 0.18));
+    const groupBarWidth = barWidth * 3 + 4;
+
+    const bars = monthly.map((item, index) => {
+        const baseX = left + index * groupWidth + (groupWidth - groupBarWidth) / 2;
+        const values = [
+            { value: item.created, className: "svg-bar-created" },
+            { value: item.finished, className: "svg-bar-finished" },
+            { value: item.cancelled, className: "svg-bar-cancelled" }
+        ];
+
+        const rects = values.map((entry, entryIndex) => {
+            const barHeight = (entry.value / max) * chartHeight;
+            const x = baseX + entryIndex * (barWidth + 2);
+            const y = top + chartHeight - barHeight;
+
+            return `
+                <rect class="${entry.className}" x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" rx="2"></rect>
+                ${entry.value > 0 ? `<text class="svg-axis-text" x="${x + barWidth / 2}" y="${y - 4}" text-anchor="middle">${entry.value}</text>` : ""}
+            `;
+        }).join("");
+
+        return `
+            ${rects}
+            <text class="svg-axis-text" x="${baseX + groupBarWidth / 2}" y="${height - 17}" text-anchor="middle">${escapeHtml(item.label)}</text>
+        `;
+    }).join("");
+
+    const gridLines = [0, 0.25, 0.5, 0.75, 1].map(part => {
+        const y = top + chartHeight - chartHeight * part;
+        const value = Math.round(max * part);
+
+        return `
+            <line class="svg-grid" x1="${left}" y1="${y}" x2="${width - right}" y2="${y}"></line>
+            <text class="svg-axis-text" x="${left - 7}" y="${y + 4}" text-anchor="end">${value}</text>
+        `;
+    }).join("");
+
+    return `
+        <div class="chart-card chart-wide">
+            <h3 class="chart-card-title">Создание, завершение и отмена заявок</h3>
+
+            <div class="chart-legend">
+                <span class="chart-legend-item"><span class="legend-square"></span>Создано</span>
+                <span class="chart-legend-item"><span class="legend-square finished"></span>Завершено</span>
+                <span class="chart-legend-item"><span class="legend-square cancelled"></span>Отменено</span>
+            </div>
+
+            <svg class="svg-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Динамика событий по заявкам">
+                ${gridLines}
+                ${bars}
+            </svg>
+
+            <table class="report-table" style="margin-top:8px;">
+                <thead>
+                    <tr>
+                        <th>Месяц</th>
+                        <th class="numeric">Создано</th>
+                        <th class="numeric">Завершено</th>
+                        <th class="numeric">Отменено</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${monthly.map(item => `
+                        <tr>
+                            <td>${escapeHtml(item.label)}</td>
+                            <td class="numeric">${item.created}</td>
+                            <td class="numeric">${item.finished}</td>
+                            <td class="numeric">${item.cancelled}</td>
+                        </tr>
+                    `).join("")}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderOrganizationEventsTable(items) {
+    if (!items.length) {
+        return `<div class="muted">Нет данных для отображения</div>`;
+    }
+
     return `
         <table class="report-table">
             <thead>
                 <tr>
-                    <th>Месяц</th>
-                    <th>Создано</th>
-                    <th>Завершено</th>
-                    <th>Отменено</th>
-                    <th>Визуально</th>
+                    <th>Организация</th>
+                    <th class="numeric">Создано</th>
+                    <th class="numeric">Завершено</th>
+                    <th class="numeric">Отменено</th>
                 </tr>
             </thead>
             <tbody>
-                ${monthly.map(item => `
+                ${items.map(item => `
                     <tr>
-                        <td>${escapeHtml(item.label)}</td>
-                        <td>${item.created}</td>
-                        <td>${item.finished}</td>
-                        <td>${item.cancelled}</td>
-                        <td>
-                            <div class="bar-track" title="Создано">
-                                <div class="bar-fill" style="width:${Math.round((item.created / max) * 100)}%"></div>
-                            </div>
-                        </td>
+                        <td>${escapeHtml(item.org)}</td>
+                        <td class="numeric">${item.created}</td>
+                        <td class="numeric">${item.finished}</td>
+                        <td class="numeric">${item.cancelled}</td>
                     </tr>
                 `).join("")}
             </tbody>
@@ -1474,11 +2430,11 @@ function renderOrgHoursTable(orgHours) {
             <thead>
                 <tr>
                     <th>Организация</th>
-                    <th>Заявок</th>
-                    <th>Лимит</th>
-                    <th>Потрачено</th>
-                    <th>Остаток</th>
-                    <th>Использование</th>
+                    <th class="numeric">Заявок</th>
+                    <th class="numeric">Лимит</th>
+                    <th class="numeric">Учтено</th>
+                    <th class="numeric">Остаток</th>
+                    <th class="numeric">Использование</th>
                 </tr>
             </thead>
             <tbody>
@@ -1489,21 +2445,20 @@ function renderOrgHoursTable(orgHours) {
         return `
                         <tr>
                             <td>${escapeHtml(item.org)}</td>
-                            <td>${item.count}</td>
-                            <td>${formatHours(item.limit)}</td>
-                            <td>${formatHours(item.spent)}</td>
-                            <td>${formatHours(remaining)}</td>
-                            <td>
-                                <div class="bar-track">
-                                    <div class="bar-fill" style="width:${percent}%"></div>
-                                </div>
-                                <div class="muted">${percent}%</div>
-                            </td>
+                            <td class="numeric">${item.count}</td>
+                            <td class="numeric">${formatHours(item.limit)}</td>
+                            <td class="numeric">${formatHours(item.spent)}</td>
+                            <td class="numeric">${formatHours(remaining)}</td>
+                            <td class="numeric">${percent}%</td>
                         </tr>
                     `;
     }).join("")}
             </tbody>
         </table>
+
+        <div class="report-footer-note">
+            В трудозатраты включаются интервалы, когда заявка находилась в статусе «В работе».
+        </div>
     `;
 }
 
@@ -1511,55 +2466,38 @@ function renderInsights(data, topOrganizations, topTopics) {
     const topOrg = topOrganizations[0];
     const topTopic = topTopics[0];
 
-    return `
-        <ul class="insight-list">
-            <li>За выбранный период в отчёт попало <strong>${data.total}</strong> заявок.</li>
-            <li>Доля завершённых заявок составляет <strong>${data.completionRate}%</strong>, доля отменённых — <strong>${data.cancelRate}%</strong>.</li>
-            <li>Суммарные учтённые трудозатраты составляют <strong>${formatHours(data.totalHours)}</strong>.</li>
-            ${topOrg
-            ? `<li>Наибольшее количество заявок у организации <strong>${escapeHtml(topOrg[0])}</strong>: ${topOrg[1]}.</li>`
-            : ""
-        }
-            ${topTopic
-            ? `<li>Самая частая тема обращений: <strong>${escapeHtml(topTopic[0])}</strong> — ${topTopic[1]}.</li>`
-            : ""
-        }
-        </ul>
-    `;
-}
+    const sliText = data.sliExecution === null
+        ? "не рассчитывается из-за отсутствия закрытых заявок"
+        : `${data.sliExecution}%`;
 
-function renderRequestsReportTable(items) {
     return `
-        <table class="report-table">
-            <thead>
-                <tr>
-                    <th>Дата</th>
-                    <th>Заголовок</th>
-                    <th>Тема</th>
-                    <th>Организация</th>
-                    <th>Филиал</th>
-                    <th>Продукт</th>
-                    <th>Приоритет</th>
-                    <th>Статус</th>
-                    <th>Часы</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${items.map(item => `
-                    <tr>
-                        <td>${escapeHtml(item.date || "-")}</td>
-                        <td>${escapeHtml(item.title || "-")}</td>
-                        <td>${escapeHtml(item.topic || "-")}</td>
-                        <td>${escapeHtml(item.org || "-")}</td>
-                        <td>${escapeHtml(item.branch || "-")}</td>
-                        <td>${escapeHtml(item.product || "-")}</td>
-                        <td>${escapeHtml(item.priority || "-")}</td>
-                        <td><span class="status-pill">${escapeHtml(item.status || "-")}</span></td>
-                        <td>${formatHours(item.hours || 0)}</td>
-                    </tr>
-                `).join("")}
-            </tbody>
-        </table>
+        <p class="conclusion-text">
+            За выбранный период создано <strong>${data.created}</strong> заявок, завершено <strong>${data.completed}</strong>, отменено <strong>${data.cancelled}</strong>.
+            SLI выполнения заявок составляет <strong>${sliText}</strong>.
+        </p>
+
+        <p class="conclusion-text">
+            На дату формирования отчёта в системе учитывается <strong>${data.currentTotal}</strong> заявок с учётом выбранного фильтра статусов.
+            Активных заявок: <strong>${data.currentActive}</strong>.
+        </p>
+
+        ${topOrg
+            ? `<p class="conclusion-text">
+                    Наибольшее количество заявок за период поступило от организации <strong>${escapeHtml(topOrg.org)}</strong>: ${topOrg.created}.
+               </p>`
+            : ""
+        }
+
+        ${topTopic
+            ? `<p class="conclusion-text">
+                    Наиболее распространённая тематика обращений за период — <strong>${escapeHtml(topTopic[0])}</strong>: ${topTopic[1]}.
+               </p>`
+            : ""
+        }
+
+        <p class="conclusion-text">
+            Показатели отчёта могут использоваться для оценки интенсивности обращений, текущей загрузки и соблюдения лимитов технической поддержки.
+        </p>
     `;
 }
 
@@ -1567,13 +2505,7 @@ function buildMonthlyReportStats(items) {
     const months = {};
     const monthNames = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
 
-    items.forEach(item => {
-        const date = parseRuDate(item.date);
-
-        if (!date) {
-            return;
-        }
-
+    function ensureMonth(date) {
         const monthNumber = String(date.getMonth() + 1).padStart(2, "0");
         const key = `${date.getFullYear()}-${monthNumber}`;
 
@@ -1586,14 +2518,23 @@ function buildMonthlyReportStats(items) {
             };
         }
 
-        months[key].created++;
+        return months[key];
+    }
 
-        if (item.status === "Завершена") {
-            months[key].finished++;
+    items.forEach(item => {
+        const createdDate = parseRuDate(item.date);
+        if (createdDate && isDateInSelectedPeriod(createdDate)) {
+            ensureMonth(createdDate).created++;
         }
 
-        if (item.status === "Отменена") {
-            months[key].cancelled++;
+        const finishedDate = parseRuDate(item.finishedDate);
+        if (finishedDate && isDateInSelectedPeriod(finishedDate)) {
+            ensureMonth(finishedDate).finished++;
+        }
+
+        const cancelledDate = parseRuDate(item.cancelledDate);
+        if (cancelledDate && isDateInSelectedPeriod(cancelledDate)) {
+            ensureMonth(cancelledDate).cancelled++;
         }
     });
 
@@ -1647,6 +2588,66 @@ function buildOrganizationHoursReportStats(items) {
         .sort((a, b) => b.spent - a.spent);
 }
 
+function isDateInSelectedPeriod(date) {
+    if (!date || Number.isNaN(date.getTime())) {
+        return false;
+    }
+
+    const filters = collectFilters();
+
+    if (filters.startDate) {
+        const start = new Date(filters.startDate);
+        start.setHours(0, 0, 0, 0);
+
+        if (date < start) {
+            return false;
+        }
+    }
+
+    if (filters.endDate) {
+        const end = new Date(filters.endDate);
+        end.setHours(23, 59, 59, 999);
+
+        if (date > end) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function getReportStatusOrder() {
+    const allStatuses = [
+        "Создана",
+        "В работе",
+        "Уточнение",
+        "Ожидание",
+        "Завершена",
+        "Отменена"
+    ];
+
+    const selectedStatuses = collectFilters().statuses;
+
+    if (selectedStatuses.length > 0) {
+        return allStatuses.filter(status => selectedStatuses.includes(status));
+    }
+
+    return allStatuses;
+}
+
+function orderedStatusEntries(statuses) {
+    const order = getReportStatusOrder();
+    const result = order.map(status => [status, statuses?.[status] || 0]);
+
+    Object.entries(statuses || {}).forEach(([status, value]) => {
+        if (!order.includes(status)) {
+            result.push([status, value]);
+        }
+    });
+
+    return result;
+}
+
 function countBy(items, selector) {
     return items.reduce((result, item) => {
         const key = selector(item) || "Не указано";
@@ -1656,7 +2657,7 @@ function countBy(items, selector) {
 }
 
 function toSortedEntries(object) {
-    return Object.entries(object)
+    return Object.entries(object || {})
         .sort((a, b) => b[1] - a[1]);
 }
 
@@ -1679,14 +2680,17 @@ function getReportPeriodText() {
     return `по ${formatInputDate(to)}`;
 }
 
-function getReportFiltersText() {
+function getReportFiltersText(includeStatus = true) {
     const parts = [];
 
     addReportFilterPart(parts, "Организации", ".filter-org");
     addReportFilterPart(parts, "Филиалы", ".filter-branch");
     addReportFilterPart(parts, "Продукты", ".filter-product");
-    addReportFilterPart(parts, "Статусы", ".filter-status");
     addReportFilterPart(parts, "Клиенты", ".filter-client");
+
+    if (includeStatus) {
+        addReportFilterPart(parts, "Статусы", ".filter-status");
+    }
 
     const search = document.getElementById("searchInput")?.value?.trim();
 
@@ -1695,6 +2699,14 @@ function getReportFiltersText() {
     }
 
     return parts.length ? parts.join("; ") : "Без дополнительных фильтров";
+}
+
+function getReportStatusFiltersText() {
+    const values = [...document.querySelectorAll(".filter-status:checked")]
+        .filter(cb => cb.value !== "all" && !cb.disabled)
+        .map(cb => cb.parentElement.textContent.trim());
+
+    return values.length ? values.join(", ") : "Все статусы";
 }
 
 function addReportFilterPart(parts, label, selector) {
@@ -1722,6 +2734,14 @@ function formatInputDate(value) {
 }
 
 function formatDateTime(date) {
+    if (!(date instanceof Date)) {
+        date = new Date(date);
+    }
+
+    if (Number.isNaN(date.getTime())) {
+        return "-";
+    }
+
     return date.toLocaleString("ru-RU", {
         day: "2-digit",
         month: "2-digit",
@@ -1730,6 +2750,7 @@ function formatDateTime(date) {
         minute: "2-digit"
     });
 }
+
 /* =========================
    CREATE MODAL
 ========================= */
@@ -2461,7 +3482,7 @@ function formatHours(value) {
 }
 
 function showToastAndFocus(message, elementId) {
-    showToast(message, "warning");
+    showToast(message);
 
     const element = document.getElementById(elementId);
 
@@ -2481,13 +3502,26 @@ function showToastAndFocus(message, elementId) {
     }
 }
 
-function showToast(message, type = "success") {
-    if (window.showAppToast) {
-        window.showAppToast(message, type);
-        return;
+function showToast(message) {
+    let toast = document.getElementById("toast");
+
+    if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "toast";
+        toast.className = "toast";
+        document.body.appendChild(toast);
     }
 
-    alert(message);
+    toast.textContent = message;
+    toast.classList.remove("fade-out");
+    toast.classList.add("visible");
+
+    clearTimeout(toast._timer);
+
+    toast._timer = setTimeout(() => {
+        toast.classList.add("fade-out");
+        toast.classList.remove("visible");
+    }, 2600);
 }
 
 function escapeHtml(value) {
