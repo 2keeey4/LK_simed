@@ -1764,8 +1764,12 @@ function buildRequestsReportHtml(data) {
 
         .charts-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+
+        .charts-grid .chart-card {
+            width: 100%;
         }
 
         .chart-wide {
@@ -2142,7 +2146,6 @@ function renderSliTable(data) {
                     <th>Показатель</th>
                     <th>Период расчёта</th>
                     <th>Назначение</th>
-                    <th>Расчёт</th>
                     <th class="numeric">Значение</th>
                 </tr>
             </thead>
@@ -2151,21 +2154,18 @@ function renderSliTable(data) {
                     <td>SLI выполнения заявок</td>
                     <td>За выбранный период</td>
                     <td>Доля заявок, закрытых успешным выполнением</td>
-                    <td>Завершено / (Завершено + Отменено) × 100%</td>
                     <td class="numeric">${executionValue}</td>
                 </tr>
                 <tr>
                     <td>SLI обработки обращений</td>
                     <td>На дату формирования</td>
                     <td>Доля заявок, которые перешли из первичного статуса в обработку или закрытие</td>
-                    <td>Обработано / Всего заявок на дату × 100%</td>
                     <td class="numeric">${processingValue}</td>
                 </tr>
                 <tr>
                     <td>SLI соблюдения лимитов поддержки</td>
                     <td>На дату формирования</td>
                     <td>Доля организаций без превышения установленного лимита часов</td>
-                    <td>Организации без превышения / Организации с лимитом × 100%</td>
                     <td class="numeric">${limitsValue}</td>
                 </tr>
             </tbody>

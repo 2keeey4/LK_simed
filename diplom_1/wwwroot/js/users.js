@@ -29,6 +29,8 @@ let userTotalPages = 1;
 let userSelectedOrgs = [];
 let userSelectedBranches = [];
 
+let userModalActiveTab = "tab-general";
+
 document.addEventListener("DOMContentLoaded", async () => {
     await loadDictionaries();
     await loadOrgs();
@@ -161,18 +163,28 @@ function initUserHandlers() {
     document.getElementById("closeModal")?.addEventListener("click", closeModal);
     document.getElementById("cancelUserBtn")?.addEventListener("click", closeModal);
 
-    document.getElementById("nextToPermissions")?.addEventListener("click", () => switchTab("tab-permissions"));
-    document.getElementById("backToGeneral")?.addEventListener("click", () => switchTab("tab-general"));
+    document.getElementById("nextToPermissions")?.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        switchUserModalTab("tab-permissions");
+    });
+
+    document.getElementById("backToGeneral")?.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        switchUserModalTab("tab-general");
+    });
 
     document.querySelectorAll("#userModal .tab-button").forEach(button => {
         button.addEventListener("click", event => {
             event.preventDefault();
+            event.stopPropagation();
 
-            const tabId = button.dataset.tab;
+            const tabId = event.currentTarget.dataset.tab;
 
             if (!tabId) return;
 
-            switchTab(tabId);
+            switchUserModalTab(tabId);
         });
     });
 
@@ -385,7 +397,7 @@ async function openEditModal(id) {
         renderPermissions(currentPermissions);
 
         document.getElementById("userModal").style.display = "flex";
-        switchTab("tab-general", false);
+        switchUserModalTab("tab-general", false);
     } catch (error) {
         console.error("Ошибка загрузки пользователя:", error);
         showToast("Ошибка загрузки данных");
@@ -422,25 +434,41 @@ function openCreateModal() {
 
 
     document.getElementById("userModal").style.display = "flex";
-    switchTab("tab-general", false);
+    switchUserModalTab("tab-general", false);
 }
 
 function closeModal() {
     document.getElementById("userModal").style.display = "none";
 }
 
-function switchTab(tabId, forceRenderPermissions = false) {
-    document.querySelectorAll("#userModal .tab-button").forEach(button => {
-        button.classList.toggle("active", button.dataset.tab === tabId);
+function switchUserModalTab(tabId, forceRenderPermissions = false) {
+    const modal = document.getElementById("userModal");
+
+    if (!modal || !tabId) {
+        return;
+    }
+
+    userModalActiveTab = tabId;
+
+    modal.querySelectorAll(".tab-button").forEach(button => {
+        const isActive = button.dataset.tab === tabId;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
     });
 
-    document.querySelectorAll("#userModal .tab-content").forEach(tab => {
-        tab.classList.toggle("active", tab.id === tabId);
+    modal.querySelectorAll(".tab-content").forEach(tab => {
+        const isActive = tab.id === tabId;
+        tab.classList.toggle("active", isActive);
+        tab.style.display = isActive ? "block" : "none";
     });
 
     if (tabId === "tab-permissions" && forceRenderPermissions) {
         renderPermissions(currentPermissions);
     }
+}
+
+function switchTab(tabId, forceRenderPermissions = false) {
+    switchUserModalTab(tabId, forceRenderPermissions);
 }
 
 function renderPermissions(existing = []) {
@@ -844,7 +872,7 @@ async function saveUser() {
 
     if (!permissionValidation.valid) {
         showToast(permissionValidation.message);
-        switchTab("tab-permissions", false);
+        switchUserModalTab("tab-permissions", false);
 
         permissionValidation.line?.scrollIntoView({
             behavior: "smooth",
@@ -970,7 +998,6 @@ async function loadOrgs(page = 1) {
         orgCurrentPage = page;
         const res = await fetch(`/Users/Users?handler=GetOrgs&page=${page}&pageSize=${orgPageSize}`);
         const result = await res.json();
-
         const tbody = document.getElementById("orgsBody");
         tbody.innerHTML = "";
 

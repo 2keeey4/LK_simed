@@ -38,6 +38,7 @@ namespace diplom_1.Pages.Requests
 
         public bool CanCreate { get; set; }
         public bool CanReopenStatus { get; set; }
+        public bool CanCancelStatus { get; set; }
 
         public bool CanAddComments { get; set; }
         public bool CanEditComments { get; set; }
@@ -671,7 +672,7 @@ namespace diplom_1.Pages.Requests
 
             if (normalizedField == "status")
             {
-                if (!CanChangeStatus && !CanReopenStatus)
+                if (!CanChangeStatus && !CanReopenStatus && !CanCancelStatus)
                 {
                     return JsonFail("Нет права изменять статус этой заявки");
                 }
@@ -815,7 +816,7 @@ namespace diplom_1.Pages.Requests
 
             if (normalizedField == "status")
             {
-                if (!CanChangeStatus && !CanReopenStatus)
+                if (!CanChangeStatus && !CanReopenStatus && !CanCancelStatus)
                 {
                     return JsonFail("Нет права изменять статус этой заявки");
                 }
@@ -858,7 +859,8 @@ namespace diplom_1.Pages.Requests
                     var allowedStatusNames = GetAllowedStatuses(
     request.RequestStatus?.Name,
     CanChangeStatus,
-    CanReopenStatus
+    CanReopenStatus,
+    CanCancelStatus
 );
 
                     data = await _context.RequestStatuses
@@ -978,6 +980,10 @@ namespace diplom_1.Pages.Requests
             CanReopenStatus =
                 CanCreate &&
                 (currentStatus == "Завершена" || currentStatus == "Отменена");
+
+            CanCancelStatus =
+                CanCreate &&
+                currentStatus != "Отменена";
 
             CanAddComments = CanAddCommentsInScope(request);
             CanEditComments = CanEditCommentsInScope(request);
@@ -1168,7 +1174,7 @@ namespace diplom_1.Pages.Requests
 
             return false;
         }
-                private async Task<FieldUpdateResult> ApplyFieldUpdateAsync(Request request, string field, string value)
+        private async Task<FieldUpdateResult> ApplyFieldUpdateAsync(Request request, string field, string value)
         {
             switch (field)
             {
@@ -1288,7 +1294,8 @@ namespace diplom_1.Pages.Requests
             var allowedStatuses = GetAllowedStatuses(
     currentStatus,
     CanChangeStatus,
-    CanReopenStatus
+    CanReopenStatus,
+    CanCancelStatus
 );
 
             if (!allowedStatuses.Contains(newStatus.Name))
@@ -1305,7 +1312,8 @@ namespace diplom_1.Pages.Requests
         private List<string> GetAllowedStatuses(
     string? currentStatus,
     bool canChangeStatus,
-    bool canReopenStatus)
+    bool canReopenStatus,
+    bool canCancelStatus)
         {
             string status = currentStatus ?? "";
 
@@ -1364,33 +1372,22 @@ namespace diplom_1.Pages.Requests
                 };
             }
 
-            if (canReopenStatus)
-            {
-                return status switch
-                {
-                    "Завершена" => new List<string>
-            {
-                "Завершена",
-                "Создана"
-            },
-
-                    "Отменена" => new List<string>
-            {
-                "Отменена",
-                "Создана"
-            },
-
-                    _ => new List<string>
-            {
-                status
-            }
-                };
-            }
-
-            return new List<string>
+            var result = new List<string>
     {
         status
     };
+
+            if (canReopenStatus && (status == "Завершена" || status == "Отменена"))
+            {
+                result.Add("Создана");
+            }
+
+            if (canCancelStatus && status != "Отменена")
+            {
+                result.Add("Отменена");
+            }
+
+            return result.Distinct().ToList();
         }
 
         private async Task<FieldUpdateResult> UpdateOrganizationAsync(Request request, string value)

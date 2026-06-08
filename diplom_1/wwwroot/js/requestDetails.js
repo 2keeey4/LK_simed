@@ -826,24 +826,24 @@ function bindCommentCardActions(card) {
 }
 
 function canEditAddedComment(comment) {
-    if (!comment || Number(comment.authorId) !== Number(getCurrentUserId())) {
+    if (!comment) {
         return false;
     }
 
     if (comment.isInternal) {
-        return getPageFlag("canEditInternalComments");
+        return getPageFlag("canViewInternalComments") && getPageFlag("canEditInternalComments");
     }
 
     return getPageFlag("canEditComments");
 }
 
 function canDeleteAddedComment(comment) {
-    if (!comment || Number(comment.authorId) !== Number(getCurrentUserId())) {
+    if (!comment) {
         return false;
     }
 
     if (comment.isInternal) {
-        return getPageFlag("canDeleteInternalComments");
+        return getPageFlag("canViewInternalComments") && getPageFlag("canDeleteInternalComments");
     }
 
     return getPageFlag("canDeleteComments");
