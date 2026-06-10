@@ -510,6 +510,7 @@ function getRowData(row) {
         date: cells[cells.length - 1]?.textContent.trim() || "",
         finishedDate: row.dataset.finishedDate || "",
         cancelledDate: row.dataset.cancelledDate || "",
+        estimatedHours: Number(row.dataset.estimatedHours || 0),
         hours: Number(row.dataset.workHours || 0)
     };
 }
@@ -1254,6 +1255,7 @@ function updateHoursTable(rows) {
             orgStats[item.org] = {
                 count: 0,
                 spent: 0,
+                estimated: 0,
                 limit: 0
             };
         }
@@ -1279,6 +1281,7 @@ function updateHoursTable(rows) {
             orgStats[name] = {
                 count: 0,
                 spent: 0,
+                estimated: 0,
                 limit
             };
         } else {
@@ -1432,6 +1435,14 @@ function buildRequestsReportData(
     const currentAllItems = currentAllRows.map(row => getRowData(row));
     const hoursItems = hoursRows.map(row => getRowData(row));
 
+    const estimatedHoursTotal = hoursItems.reduce((sum, item) => sum + Number(item.estimatedHours || 0), 0);
+    const totalHours = hoursItems.reduce((sum, item) => sum + Number(item.hours || 0), 0);
+    const itemsWithEstimate = hoursItems.filter(item => Number(item.estimatedHours || 0) > 0);
+    const itemsWithinEstimate = itemsWithEstimate.filter(item => Number(item.hours || 0) <= Number(item.estimatedHours || 0));
+    const sliEstimatedTime = itemsWithEstimate.length > 0
+        ? Math.round((itemsWithinEstimate.length / itemsWithEstimate.length) * 100)
+        : null;
+
     const created = periodItems.length;
 
     const completed = eventItems.filter(item => {
@@ -1539,6 +1550,12 @@ function buildRequestsReportData(
         orgHours,
         orgsWithLimitCount: orgsWithLimit.length,
         orgsWithoutLimitExcessCount: orgsWithoutLimitExcess.length,
+
+        estimatedHoursTotal,
+        totalHours,
+        itemsWithEstimateCount: itemsWithEstimate.length,
+        itemsWithinEstimateCount: itemsWithinEstimate.length,
+        sliEstimatedTime,
 
         sliExecution,
         sliProcessing,
@@ -2121,6 +2138,14 @@ function renderPeriodSummaryTable(data) {
                     <td>Количество закрытых заявок за период</td>
                     <td>${data.closed}</td>
                 </tr>
+                <tr>
+                    <td>Расчётное время по заявкам</td>
+                    <td>${formatHours(data.estimatedHoursTotal)}</td>
+                </tr>
+                <tr>
+                    <td>Фактически затраченное время</td>
+                    <td>${formatHours(data.totalHours)}</td>
+                </tr>
             </tbody>
         </table>
     `;
@@ -2138,6 +2163,10 @@ function renderSliTable(data) {
     const limitsValue = data.sliLimits === null
         ? "—"
         : `${data.sliLimits}%`;
+
+    const estimatedTimeValue = data.sliEstimatedTime === null
+        ? "—"
+        : `${data.sliEstimatedTime}%`;
 
     return `
         <table class="report-table">
@@ -2167,6 +2196,12 @@ function renderSliTable(data) {
                     <td>На дату формирования</td>
                     <td>Доля организаций без превышения установленного лимита часов</td>
                     <td class="numeric">${limitsValue}</td>
+                </tr>
+                <tr>
+                    <td>SLI соблюдения расчётного времени</td>
+                    <td>На дату формирования</td>
+                    <td>Доля заявок, по которым фактические трудозатраты не превысили расчётное время</td>
+                    <td class="numeric">${estimatedTimeValue}</td>
                 </tr>
             </tbody>
         </table>
@@ -2432,6 +2467,7 @@ function renderOrgHoursTable(orgHours) {
                     <th>Организация</th>
                     <th class="numeric">Заявок</th>
                     <th class="numeric">Лимит</th>
+                    <th class="numeric">Расчётное</th>
                     <th class="numeric">Учтено</th>
                     <th class="numeric">Остаток</th>
                     <th class="numeric">Использование</th>
@@ -2447,6 +2483,7 @@ function renderOrgHoursTable(orgHours) {
                             <td>${escapeHtml(item.org)}</td>
                             <td class="numeric">${item.count}</td>
                             <td class="numeric">${formatHours(item.limit)}</td>
+                            <td class="numeric">${formatHours(item.estimated || 0)}</td>
                             <td class="numeric">${formatHours(item.spent)}</td>
                             <td class="numeric">${formatHours(remaining)}</td>
                             <td class="numeric">${percent}%</td>
@@ -2474,6 +2511,8 @@ function renderInsights(data, topOrganizations, topTopics) {
         <p class="conclusion-text">
             За выбранный период создано <strong>${data.created}</strong> заявок, завершено <strong>${data.completed}</strong>, отменено <strong>${data.cancelled}</strong>.
             SLI выполнения заявок составляет <strong>${sliText}</strong>.
+            Расчётное время по заявкам составляет <strong>${formatHours(data.estimatedHoursTotal)}</strong>, фактически затраченное время — <strong>${formatHours(data.totalHours)}</strong>.
+            SLI соблюдения расчётного времени: <strong>${data.sliEstimatedTime === null ? "—" : `${data.sliEstimatedTime}%`}</strong>.
         </p>
 
         <p class="conclusion-text">
@@ -2556,12 +2595,14 @@ function buildOrganizationHoursReportStats(items) {
                 org: item.org,
                 count: 0,
                 spent: 0,
+                estimated: 0,
                 limit: 0
             };
         }
 
         stats[item.org].count++;
         stats[item.org].spent += Number(item.hours || 0);
+        stats[item.org].estimated += Number(item.estimatedHours || 0);
     });
 
     (window.organizationHours || []).forEach(item => {
@@ -2577,6 +2618,7 @@ function buildOrganizationHoursReportStats(items) {
                 org: name,
                 count: 0,
                 spent: 0,
+                estimated: 0,
                 limit
             };
         } else {
@@ -2956,7 +2998,6 @@ function filterCreateProducts(orgId) {
     });
 
     product.value = "";
-
     if (!hasAvailable) {
         showToast("Для выбранной организации нет доступных продуктов");
     }

@@ -210,6 +210,7 @@ namespace diplom_1.Pages.Requests
                     CreatedAt = r.CreatedAt,
                     FinishedAt = GetLatestStatusChangedAt(r.Id, "Завершена"),
                     CancelledAt = GetLatestStatusChangedAt(r.Id, "Отменена"),
+                    EstimatedHours = r.EstimatedHours,
                     WorkHours = CalculateWorkHours(r.Id),
                     IsWorkHoursRunning = r.RequestStatus != null && r.RequestStatus.Name == "В работе"
                 })
@@ -679,6 +680,16 @@ namespace diplom_1.Pages.Requests
                     }
                 }
 
+                double estimatedHours = await CalculateEstimatedHoursForRequestAsync(
+                    uid,
+                    requestTopicId,
+                    orgId,
+                    branchId,
+                    productId,
+                    requestPriorityId,
+                    description
+                );
+
                 var newRequest = new Request
                 {
                     Title = title,
@@ -690,6 +701,7 @@ namespace diplom_1.Pages.Requests
                     RequestStatusId = createdStatus.Id,
                     CreatedById = createdById,
                     Description = description,
+                    EstimatedHours = estimatedHours,
                     CreatedAt = DateTime.UtcNow
                 };
 
@@ -917,6 +929,92 @@ namespace diplom_1.Pages.Requests
                     error = ex.Message
                 });
             }
+        }
+
+
+        private async Task<double> CalculateEstimatedHoursForRequestAsync(
+            int currentUserId,
+            int requestTopicId,
+            int organizationId,
+            int? branchId,
+            int productId,
+            int requestPriorityId,
+            string description)
+        {
+            var topicEntity = await _context.RequestTopics
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == requestTopicId);
+
+            var priorityEntity = await _context.RequestPriorities
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == requestPriorityId);
+
+            string topic = topicEntity?.Name ?? "";
+            string priority = priorityEntity?.Name ?? "";
+
+            var completedRequests = await _context.Requests
+                .AsNoTracking()
+                .Include(r => r.RequestTopic)
+                .Include(r => r.RequestPriority)
+                .Include(r => r.RequestStatus)
+                .Where(r => r.RequestStatus != null && r.RequestStatus.Name == "Завершена")
+                .Where(r =>
+                    r.CreatedById == currentUserId ||
+                    (r.OrganizationId != null && ViewOrgIds.Contains(r.OrganizationId.Value)) ||
+                    (r.BranchId != null && ViewBranchIds.Contains(r.BranchId.Value)))
+                .ToListAsync();
+
+            var samples = completedRequests
+                .Select(r => new EstimateSampleDto
+                {
+                    RequestId = r.Id,
+                    Topic = r.RequestTopic?.Name ?? "",
+                    OrganizationId = r.OrganizationId,
+                    BranchId = r.BranchId,
+                    ProductId = r.ProductId,
+                    Priority = r.RequestPriority?.Name ?? "",
+                    Hours = CalculateCompletedWorkHours(r.Id)
+                })
+                .Where(x => x.Hours > 0)
+                .ToList();
+
+            var productTopicSamples = samples
+                .Where(x =>
+                    x.ProductId == productId &&
+                    NormalizeText(x.Topic) == NormalizeText(topic))
+                .ToList();
+
+            var topicSamples = samples
+                .Where(x => NormalizeText(x.Topic) == NormalizeText(topic))
+                .ToList();
+
+            List<EstimateSampleDto> selectedSamples;
+
+            if (productTopicSamples.Any())
+            {
+                selectedSamples = productTopicSamples;
+            }
+            else if (topicSamples.Any())
+            {
+                selectedSamples = topicSamples;
+            }
+            else
+            {
+                selectedSamples = new List<EstimateSampleDto>();
+            }
+
+            double baseHours = GetBaseHoursByTopic(topic);
+            double sampleAverage = selectedSamples.Any()
+                ? selectedSamples.Average(x => x.Hours)
+                : baseHours;
+
+            double priorityFactor = GetPriorityFactor(priority);
+            double descriptionFactor = GetDescriptionFactor(description);
+
+            double estimatedHours = sampleAverage * priorityFactor * descriptionFactor;
+            estimatedHours = Math.Clamp(estimatedHours, 0.5, 120);
+
+            return Math.Round(estimatedHours, 2);
         }
 
         public async Task<IActionResult> OnGetApiEstimateHoursAsync(
@@ -1346,6 +1444,7 @@ namespace diplom_1.Pages.Requests
             public DateTime CreatedAt { get; set; }
             public DateTime? FinishedAt { get; set; }
             public DateTime? CancelledAt { get; set; }
+            public double? EstimatedHours { get; set; }
             public double WorkHours { get; set; }
             public bool IsWorkHoursRunning { get; set; }
         }

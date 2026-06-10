@@ -330,6 +330,7 @@
                         <tr data-request-id="@request.Id"
                             data-client="@request.ClientName"
                             data-work-hours="@request.WorkHours.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                            data-estimated-hours="@((request.EstimatedHours ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture))"
                             data-finished-date="@(request.FinishedAt?.ToString("dd.MM.yyyy") ?? "")"
                             data-cancelled-date="@(request.CancelledAt?.ToString("dd.MM.yyyy") ?? "")"
                             data-work-hours-running="@request.IsWorkHoursRunning.ToString().ToLower()">

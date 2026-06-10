@@ -3,10 +3,9 @@ using diplom_1.Models;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using MimeKit;
-using System;
-using System.Threading;
 
 namespace diplom_1.Services
 {
@@ -15,16 +14,18 @@ namespace diplom_1.Services
         private readonly AppDbContext _context;
         private readonly SmtpSettings _smtpSettings;
         private readonly ILogger<EmailNotificationService> _logger;
-        private const int SmtpTimeoutSeconds = 8;
+        private readonly IConfiguration _configuration;
 
         public EmailNotificationService(
             AppDbContext context,
             IOptions<SmtpSettings> smtpOptions,
-            ILogger<EmailNotificationService> logger)
+            ILogger<EmailNotificationService> logger,
+            IConfiguration configuration)
         {
             _context = context;
             _smtpSettings = smtpOptions.Value;
             _logger = logger;
+            _configuration = configuration;
         }
 
         public async Task<List<int>> GetRequestRecipientIdsAsync(
@@ -388,26 +389,32 @@ namespace diplom_1.Services
                 requestId
             );
 
+            string requestUrl = BuildRequestUrl(requestId);
+            string messageWithUrl = string.IsNullOrWhiteSpace(requestUrl)
+                ? message
+                : $"{message}\n\nСсылка на заявку: {requestUrl}";
+
             foreach (var user in users)
             {
-                bool sent = await SendEmailAsync(
-                    user.Email!,
-                    subject,
-                    message
-                );
-
-                if (sent)
+                try
                 {
+                    await SendEmailAsync(
+                        user.Email!,
+                        subject,
+                        messageWithUrl
+                    );
+
                     _logger.LogInformation(
                         "Уведомление по заявке {RequestId} отправлено на {Email}",
                         requestId,
                         user.Email
                     );
                 }
-                else
+                catch (Exception ex)
                 {
-                    _logger.LogWarning(
-                        "Уведомление по заявке {RequestId} на {Email} не отправлено. Основное действие продолжается.",
+                    _logger.LogError(
+                        ex,
+                        "Ошибка отправки уведомления по заявке {RequestId} на {Email}",
                         requestId,
                         user.Email
                     );
@@ -467,24 +474,34 @@ namespace diplom_1.Services
                 .ToList();
         }
 
-        private async Task<bool> SendEmailAsync(string toEmail, string subject, string body)
+
+        private string BuildRequestUrl(int requestId)
+        {
+            var baseUrl = _configuration["Application:BaseUrl"];
+
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                baseUrl = "https://localhost:7035";
+            }
+
+            return $"{baseUrl.TrimEnd('/')}/Requests/Details/{requestId}";
+        }
+
+        private async Task SendEmailAsync(string toEmail, string subject, string body)
         {
             if (string.IsNullOrWhiteSpace(_smtpSettings.Host))
             {
-                _logger.LogWarning("SMTP Host не заполнен. Письмо на {Email} не отправлено.", toEmail);
-                return false;
+                throw new InvalidOperationException("SMTP Host не заполнен");
             }
 
             if (string.IsNullOrWhiteSpace(_smtpSettings.Username))
             {
-                _logger.LogWarning("SMTP Username не заполнен. Письмо на {Email} не отправлено.", toEmail);
-                return false;
+                throw new InvalidOperationException("SMTP Username не заполнен");
             }
 
             if (string.IsNullOrWhiteSpace(_smtpSettings.Password))
             {
-                _logger.LogWarning("SMTP Password не заполнен. Письмо на {Email} не отправлено.", toEmail);
-                return false;
+                throw new InvalidOperationException("SMTP Password не заполнен");
             }
 
             string fromEmail = string.IsNullOrWhiteSpace(_smtpSettings.FromEmail)
@@ -532,14 +549,15 @@ namespace diplom_1.Services
             .Distinct()
             .ToList();
 
+            Exception? lastException = null;
+
             foreach (var attempt in attempts)
             {
                 try
                 {
                     using var client = new SmtpClient();
-                    using var smtpTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(SmtpTimeoutSeconds));
 
-                    client.Timeout = SmtpTimeoutSeconds * 1000;
+                    client.Timeout = 60000;
                     client.ServerCertificateValidationCallback = (s, c, h, e) => true;
                     client.AuthenticationMechanisms.Remove("XOAUTH2");
 
@@ -554,41 +572,40 @@ namespace diplom_1.Services
                     await client.ConnectAsync(
                         _smtpSettings.Host,
                         attempt.Port,
-                        attempt.Options,
-                        smtpTimeout.Token
+                        attempt.Options
+                    );
+
+                    _logger.LogInformation(
+                        "SMTP подключение успешно: {Host}:{Port}",
+                        _smtpSettings.Host,
+                        attempt.Port
                     );
 
                     await client.AuthenticateAsync(
                         _smtpSettings.Username,
-                        _smtpSettings.Password,
-                        smtpTimeout.Token
+                        _smtpSettings.Password
                     );
 
-                    await client.SendAsync(message, smtpTimeout.Token);
-                    await client.DisconnectAsync(true, smtpTimeout.Token);
+                    _logger.LogInformation(
+                        "SMTP авторизация успешна для {Username}",
+                        _smtpSettings.Username
+                    );
+
+                    await client.SendAsync(message);
 
                     _logger.LogInformation(
                         "SMTP письмо успешно отправлено на {Email}",
                         toEmail
                     );
 
-                    return true;
-                }
-                catch (OperationCanceledException ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "SMTP отправка на {Email} через {Host}:{Port} прервана по лимиту {Seconds} секунд. Основное действие продолжается без письма.",
-                        toEmail,
-                        _smtpSettings.Host,
-                        attempt.Port,
-                        SmtpTimeoutSeconds
-                    );
+                    await client.DisconnectAsync(true);
 
-                    return false;
+                    return;
                 }
                 catch (Exception ex)
                 {
+                    lastException = ex;
+
                     _logger.LogError(
                         ex,
                         "SMTP ошибка при отправке на {Email} через {Host}:{Port}, режим: {Mode}",
@@ -600,13 +617,10 @@ namespace diplom_1.Services
                 }
             }
 
-            _logger.LogWarning(
-                "Не удалось отправить письмо на {Email}. Все SMTP-попытки завершились ошибкой. Основное действие продолжается без письма.",
-                toEmail
+            throw new InvalidOperationException(
+                $"Не удалось отправить письмо на {toEmail}. Все SMTP-попытки завершились ошибкой.",
+                lastException
             );
-
-            return false;
         }
-
     }
 }

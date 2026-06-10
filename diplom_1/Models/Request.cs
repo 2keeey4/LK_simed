@@ -27,6 +27,8 @@ namespace diplom_1.Models
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        public double? EstimatedHours { get; set; }
+
         public int? CreatedById { get; set; }
         public User? CreatedBy { get; set; }
 
