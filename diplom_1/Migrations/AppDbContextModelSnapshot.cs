@@ -22,6 +22,39 @@ namespace diplom_1.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Comment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AuthorId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsInternal")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("RequestId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorId");
+
+                    b.HasIndex("RequestId");
+
+                    b.ToTable("Comments");
+                });
+
             modelBuilder.Entity("diplom_1.Models.Attachment", b =>
                 {
                     b.Property<int>("Id")
@@ -72,39 +105,6 @@ namespace diplom_1.Migrations
                     b.HasIndex("OrganizationId");
 
                     b.ToTable("Branches");
-                });
-
-            modelBuilder.Entity("diplom_1.Models.Comment", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("AuthorId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsInternal")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("RequestId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AuthorId");
-
-                    b.HasIndex("RequestId");
-
-                    b.ToTable("Comments");
                 });
 
             modelBuilder.Entity("diplom_1.Models.Organization", b =>
@@ -537,9 +537,27 @@ namespace diplom_1.Migrations
                     b.ToTable("UserPermissions");
                 });
 
+            modelBuilder.Entity("Comment", b =>
+                {
+                    b.HasOne("diplom_1.Models.User", "Author")
+                        .WithMany()
+                        .HasForeignKey("AuthorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("diplom_1.Models.Request", "Request")
+                        .WithMany("Comments")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Author");
+
+                    b.Navigation("Request");
+                });
+
             modelBuilder.Entity("diplom_1.Models.Attachment", b =>
                 {
-                    b.HasOne("diplom_1.Models.Comment", "Comment")
+                    b.HasOne("Comment", "Comment")
                         .WithMany("Attachments")
                         .HasForeignKey("CommentId")
                         .OnDelete(DeleteBehavior.Restrict);
@@ -563,25 +581,6 @@ namespace diplom_1.Migrations
                         .IsRequired();
 
                     b.Navigation("Organization");
-                });
-
-            modelBuilder.Entity("diplom_1.Models.Comment", b =>
-                {
-                    b.HasOne("diplom_1.Models.User", "Author")
-                        .WithMany()
-                        .HasForeignKey("AuthorId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .IsRequired();
-
-                    b.HasOne("diplom_1.Models.Request", "Request")
-                        .WithMany("Comments")
-                        .HasForeignKey("RequestId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Author");
-
-                    b.Navigation("Request");
                 });
 
             modelBuilder.Entity("diplom_1.Models.OrganizationProduct", b =>
@@ -755,14 +754,14 @@ namespace diplom_1.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Comment", b =>
+                {
+                    b.Navigation("Attachments");
+                });
+
             modelBuilder.Entity("diplom_1.Models.Branch", b =>
                 {
                     b.Navigation("UserBranches");
-                });
-
-            modelBuilder.Entity("diplom_1.Models.Comment", b =>
-                {
-                    b.Navigation("Attachments");
                 });
 
             modelBuilder.Entity("diplom_1.Models.Organization", b =>
