@@ -54,9 +54,6 @@ function initFilterPanel() {
     clearBtn?.addEventListener("click", clearFilters);
 }
 
-/* =========================
-   DROPDOWNS
-========================= */
 
 function initDropdowns() {
     document.querySelectorAll(".dropdown-toggle").forEach(toggle => {
@@ -170,9 +167,6 @@ function getDefaultDropdownText(toggleId) {
     return "Все";
 }
 
-/* =========================
-   FILTER CASCADE
-========================= */
 
 function initFilterCascading() {
     document.querySelectorAll(".filter-org").forEach(cb => {
@@ -325,9 +319,6 @@ function setFilterOptionAvailable(input, available) {
     }
 }
 
-/* =========================
-   SEARCH + FILTERING
-========================= */
 
 function initSearch() {
     const input = document.getElementById("searchInput");
@@ -515,10 +506,6 @@ function getRowData(row) {
     };
 }
 
-/* =========================
-   REQUESTS PAGINATION
-========================= */
-
 function initRequestsPagination() {
 
     const savedSize = localStorage.getItem("requestsPageSize");
@@ -680,9 +667,6 @@ function buildRequestsPageList(totalPages) {
     return pages;
 }
 
-/* =========================
-   ROW CLICKS
-========================= */
 
 function initRowClicks() {
     document.querySelectorAll("#requestsTable tbody tr").forEach(row => {
@@ -1346,9 +1330,7 @@ function updateHoursTable(rows) {
 
     container.innerHTML = html;
 }
-/* =========================
-   REPORT EXPORT
-========================= */
+
 
 function initReportExport() {
     const btn = document.getElementById("exportReportBtn");
@@ -1674,11 +1656,28 @@ function buildRequestsReportHtml(data) {
         }
 
         .report-section.compact-section,
+        .report-section.keep-together,
         .chart-card,
         .kpi-grid,
         .report-table {
             page-break-inside: avoid;
             break-inside: avoid;
+        }
+
+        .report-section-title {
+            page-break-after: avoid;
+            break-after: avoid-page;
+        }
+
+        .report-section.keep-together .report-section-title {
+            page-break-after: avoid;
+            break-after: avoid-page;
+        }
+
+        .report-section.keep-together .report-table,
+        .report-section.keep-together .table-keep-with-title {
+            page-break-before: avoid;
+            break-before: avoid-page;
         }
 
         .report-section-title {
@@ -1984,9 +1983,22 @@ function buildRequestsReportHtml(data) {
 
             tr,
             .kpi-card,
-            .chart-card {
+            .chart-card,
+            .report-section.keep-together,
+            .table-keep-with-title {
                 page-break-inside: avoid;
                 break-inside: avoid;
+            }
+
+            .report-section-title {
+                page-break-after: avoid;
+                break-after: avoid-page;
+            }
+
+            .report-section.keep-together .report-table,
+            .report-section.keep-together .table-keep-with-title {
+                page-break-before: avoid;
+                break-before: avoid-page;
             }
         }
     </style>
@@ -2081,9 +2093,11 @@ function buildRequestsReportHtml(data) {
             </div>
         </section>
 
-        <section class="report-section">
+        <section class="report-section compact-section keep-together">
             <h2 class="report-section-title">6. Контроль использования лимитов поддержки на дату формирования</h2>
-            ${renderOrgHoursTable(data.orgHours)}
+            <div class="table-keep-with-title">
+                ${renderOrgHoursTable(data.orgHours)}
+            </div>
         </section>
 
         <section class="report-section compact-section">
@@ -2873,9 +2887,6 @@ function resetCreateDependentFields() {
     refreshAllCustomSelects();
 }
 
-/* =========================
-CREATE CASCADE
-========================= */
 
 function initCreateOrgBranch() {
     const org = document.getElementById("reqOrganization");
@@ -3005,9 +3016,6 @@ function filterCreateProducts(orgId) {
     refreshCustomSelect("reqProduct");
 }
 
-/* =========================
-   CUSTOM SELECTS IN MODAL
-========================= */
 
 const customSelectIds = [
     "reqTopic",
@@ -3164,10 +3172,6 @@ function closeAllCustomSelects() {
         menu.classList.add("hidden");
     });
 }
-
-/* =========================
-   ESTIMATE MODEL IN MODAL
-========================= */
 
 function initEstimateEvents() {
     const ids = [

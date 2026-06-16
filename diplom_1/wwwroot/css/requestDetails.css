@@ -1,8 +1,4 @@
-﻿/* =========================
-   REQUEST DETAILS PAGE
-========================= */
-
-.request-details-page {
+﻿.request-details-page {
     min-height: 100%;
     padding: 18px;
     background: #f8fafc;
@@ -21,9 +17,7 @@
         box-sizing: border-box;
     }
 
-/* =========================
-   TOPBAR
-========================= */
+
 
 .details-topbar {
     display: flex;
@@ -67,9 +61,6 @@
     white-space: nowrap;
 }
 
-/* =========================
-   ALERTS
-========================= */
 
 .page-alert {
     margin-bottom: 12px;
@@ -92,9 +83,6 @@
     border-color: #fecaca;
 }
 
-/* =========================
-   LAYOUT
-========================= */
 
 .details-layout {
     display: grid;
@@ -110,10 +98,6 @@
     gap: 14px;
     min-width: 0;
 }
-
-/* =========================
-   CARDS
-========================= */
 
 .details-card {
     min-width: 0;
@@ -146,9 +130,6 @@
         margin-bottom: 10px;
     }
 
-/* =========================
-   HERO
-========================= */
 
 .request-hero {
     padding: 16px;
@@ -175,9 +156,6 @@
     overflow-wrap: anywhere;
 }
 
-/* =========================
-   DESCRIPTION
-========================= */
 
 .description-block {
     margin-top: 14px;
@@ -225,9 +203,6 @@
         font-size: 12px;
     }
 
-/* =========================
-   INFO GRID
-========================= */
 
 .info-grid {
     display: grid;
@@ -261,10 +236,6 @@
     font-weight: 600;
     overflow-wrap: anywhere;
 }
-
-/* =========================
-   EDITABLE ROWS
-========================= */
 
 .editable-line,
 .editable-row {
@@ -320,9 +291,6 @@
         color: #2563eb;
     }
 
-/* =========================
-   BUTTONS
-========================= */
 
 .btn-primary,
 .btn-secondary,
@@ -384,9 +352,6 @@
         border-color: #fca5a5;
     }
 
-/* =========================
-   BADGES
-========================= */
 
 .status-badge,
 .priority-badge,
@@ -457,9 +422,6 @@
     color: #64748b;
 }
 
-/* =========================
-   SIDEBAR
-========================= */
 
 .side-stack {
     display: flex;
@@ -474,9 +436,6 @@
     background: #fbfdff;
 }
 
-/* =========================
-   HISTORY
-========================= */
 
 .history-list {
     display: flex;
@@ -560,9 +519,6 @@
     line-height: 1.25;
 }
 
-/* =========================
-   COMMENTS
-========================= */
 
 .comment-form {
     padding: 11px;
@@ -777,10 +733,6 @@
     margin-top: 8px;
 }
 
-/* =========================
-   FILES
-========================= */
-
 .request-files {
     display: flex;
     flex-direction: column;
@@ -811,9 +763,6 @@
         width: 100%;
     }
 
-/* =========================
-   EDIT MODAL
-========================= */
 
 .edit-modal {
     position: fixed;
@@ -944,9 +893,6 @@ textarea.field-editor-control,
     margin-top: 11px;
 }
 
-/* =========================
-   TOAST
-========================= */
 
 .toast {
     position: fixed;
@@ -971,9 +917,6 @@ textarea.field-editor-control,
         transform: translateY(0);
     }
 
-/* =========================
-   CUSTOM SELECT
-========================= */
 
 .custom-select {
     position: relative;
@@ -1095,9 +1038,6 @@ textarea.field-editor-control,
     cursor: not-allowed;
 }
 
-/* =========================
-   RESPONSIVE
-========================= */
 
 @media (max-width: 1100px) {
     .details-layout {

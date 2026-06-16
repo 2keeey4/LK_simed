@@ -1,4 +1,4 @@
-﻿/* Общие стили */
+﻿
 body {
     font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
     background-color: #f5f7fa;
@@ -10,7 +10,7 @@ body {
     margin: 0;
 }
 
-/* Центрирование формы */
+
 .auth-wrapper {
     width: 100%;
     display: flex;
@@ -18,7 +18,7 @@ body {
     align-items: center;
 }
 
-/* Карточка */
+
 .auth-card {
     background: #ffffff;
     border-radius: 16px;
@@ -34,7 +34,7 @@ body {
         box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
     }
 
-/* Заголовки */
+
 .auth-title {
     font-size: 22px;
     font-weight: 600;
@@ -49,14 +49,14 @@ body {
     margin-bottom: 30px;
 }
 
-/* Группа полей с иконкой */
+
 .form-group {
     position: relative;
     margin-bottom: 18px;
     width: 100%;
 }
 
-/* Поля - отключаем браузерный глаз */
+
 .form-input {
     width: 100%;
     padding: 14px;
@@ -71,7 +71,7 @@ body {
     box-sizing: border-box;
 }
 
-    /* Отключаем стандартный глаз браузера */
+    /
     .form-input::-ms-reveal,
     .form-input::-ms-clear {
         display: none;
@@ -95,7 +95,7 @@ body {
         box-shadow: 0 0 4px rgba(0, 48, 73, 0.2);
     }
 
-/* Иконка глаза */
+
 .password-toggle {
     position: absolute;
     right: 12px;
@@ -128,7 +128,7 @@ body {
         stroke: #003049;
     }
 
-/* Кнопка */
+
 .btn-login {
     background-color: #003049;
     color: #fff;
@@ -148,7 +148,7 @@ body {
         transform: translateY(-2px);
     }
 
-/* Ссылки */
+
 .link-text {
     font-size: 14px;
     color: #787486;
@@ -165,7 +165,6 @@ body {
             color: #003049;
         }
 
-/* Сообщения - ПО ЦЕНТРУ */
 .message-container {
     margin-top: 18px;
     width: 100%;

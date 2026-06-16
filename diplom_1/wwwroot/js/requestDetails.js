@@ -14,9 +14,6 @@ document.addEventListener("DOMContentLoaded", () => {
     initCustomSelectClose();
 });
 
-/* =========================
-   FIELD EDITING
-========================= */
 
 function initFieldEditing() {
     const canEdit = getPageFlag("canEdit");
@@ -387,9 +384,6 @@ function setFieldByName(field, text, value) {
     element.dataset.value = value || "";
 }
 
-/* =========================
-   CUSTOM SELECT
-========================= */
 
 function renderCustomSelect(data, currentValue, field) {
     const editor = document.getElementById("fieldEditor");
@@ -521,9 +515,7 @@ function initCustomSelectClose() {
     });
 }
 
-/* =========================
-   FIELD DATA
-========================= */
+
 
 async function loadFieldData(field) {
     const requestId = getRequestId();
@@ -573,9 +565,6 @@ async function loadFieldData(field) {
     }
 }
 
-/* =========================
-   COMMENT FILES
-========================= */
 
 function initCommentFiles() {
     const input = document.getElementById("commentFiles");
@@ -848,9 +837,7 @@ function canDeleteAddedComment(comment) {
 
     return getPageFlag("canDeleteComments");
 }
-/* =========================
-   COMMENT EDITING
-========================= */
+
 
 function initCommentEditing() {
     document.querySelectorAll(".edit-comment-btn").forEach(button => {
@@ -1109,9 +1096,6 @@ function updateInternalBadge(card, isInternal) {
     }
 }
 
-/* =========================
-   STATUS HISTORY
-========================= */
 
 function prependStatusHistoryItem(historyItem) {
     if (!historyItem) {
@@ -1161,9 +1145,6 @@ function prependStatusHistoryItem(historyItem) {
     historyList.prepend(item);
 }
 
-/* =========================
-   REQUEST DELETE
-========================= */
 
 function initRequestDelete() {
     const button = document.getElementById("deleteRequestBtn");
@@ -1231,9 +1212,6 @@ async function sendRequestDelete() {
     return await response.json();
 }
 
-/* =========================
-   KEYBOARD
-========================= */
 
 function initKeyboardHandlers() {
     document.addEventListener("keydown", event => {
@@ -1267,9 +1245,6 @@ function initKeyboardHandlers() {
     });
 }
 
-/* =========================
-   HELPERS
-========================= */
 function getRequestId() {
     const hiddenInput = document.getElementById("requestId");
 

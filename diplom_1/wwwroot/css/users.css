@@ -161,9 +161,6 @@ h2 {
         transition: background-color 5000s ease-in-out 0s;
     }
 
-/* =========================
-   MODALS
-========================= */
 
 .modal {
     display: none;
@@ -269,9 +266,6 @@ h2 {
         display: block;
     }
 
-/* =========================
-   USER MODAL GENERAL
-========================= */
 
 .user-summary {
     display: flex;
@@ -355,9 +349,6 @@ h2 {
         display: none;
     }
 
-/* =========================
-   COMPACT CHECK OPTIONS
-========================= */
 
 .options-row,
 .options-group {
@@ -425,9 +416,6 @@ h2 {
         border-color: #e2e8f0;
     }
 
-/* =========================
-   ORGANIZATION TREE
-========================= */
 
 .user-organizations {
     margin-top: 12px;
@@ -491,9 +479,6 @@ h2 {
         font-size: 12px;
     }
 
-/* =========================
-   PERMISSIONS
-========================= */
 
 .permissions-header {
     margin-bottom: 12px;
@@ -560,9 +545,6 @@ h2 {
     font-size: 11px;
 }
 
-/* =========================
-   COMMON FORMS
-========================= */
 
 .form-group {
     display: flex;
@@ -594,9 +576,6 @@ h2 {
     margin-top: 12px;
 }
 
-/* =========================
-   TOAST
-========================= */
 
 .toast {
     position: fixed;
@@ -636,9 +615,6 @@ h2 {
     border-radius: 3px;
 }
 
-/* =========================
-   DROPDOWNS / FILTERS
-========================= */
 
 .dropdown {
     position: relative;
@@ -728,9 +704,6 @@ h2 {
     display: none !important;
 }
 
-/* =========================
-   POPUP
-========================= */
 
 .popup {
     position: fixed;
@@ -848,9 +821,6 @@ h2 {
         min-width: 100px;
     }
 
-/* =========================
-   CUSTOM SELECT
-========================= */
 
 .custom-select {
     position: relative;
@@ -961,9 +931,6 @@ h2 {
         font-weight: 500;
     }
 
-/* =========================
-   BRANCH MODAL
-========================= */
 
 #branchModal .modal-content {
     max-width: 500px;
@@ -1014,9 +981,6 @@ h2 {
     box-sizing: border-box;
 }
 
-/* =========================
-   PAGINATION
-========================= */
 
 .pagination-container {
     margin-top: 15px;
@@ -1034,10 +998,6 @@ h2 {
         min-width: 35px;
         text-align: center;
     }
-
-/* =========================
-   PRODUCTS IN ORGS
-========================= */
 
 .org-row td:nth-child(6) {
     max-width: 200px;
@@ -1092,9 +1052,6 @@ h2 {
     font-style: italic;
 }
 
-/* =========================
-   RESPONSIVE
-========================= */
 
 @media (max-width: 768px) {
     .admin-container {
@@ -1172,9 +1129,6 @@ h2 {
     border-radius: 10px;
 }
 
-/* =========================
-   COMPACT TABLE CELLS + PAGINATION
-========================= */
 
 .list-cell {
     max-width: 260px;
@@ -1275,9 +1229,6 @@ h2 {
     }
 }
 
-/* =========================
-   COMPACT LISTS IN TABLES
-========================= */
 
 .list-cell {
     max-width: 320px;
@@ -1410,4 +1361,38 @@ h2 {
     color: #94a3b8;
     text-align: center;
     font-size: 13px;
+}
+
+
+.autofill-guard {
+    position: fixed;
+    left: -10000px;
+    top: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.permission-line-error {
+    border-color: #ef4444 !important;
+    background: #fef2f2 !important;
+}
+
+.autofill-decoy,
+.autofill-guard {
+    position: absolute !important;
+    left: -10000px !important;
+    top: -10000px !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+.search-input[readonly] {
+    background: #fff;
+    cursor: text;
 }

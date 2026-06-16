@@ -4,10 +4,12 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
+#pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
+
 namespace diplom_1.Migrations
 {
     /// <inheritdoc />
-    public partial class FixBranchIdIssue : Migration
+    public partial class InitialCleanCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -59,16 +61,42 @@ namespace diplom_1.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Roles",
+                name: "RequestPriorities",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Name = table.Column<string>(type: "text", nullable: false)
+                    Name = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Roles", x => x.Id);
+                    table.PrimaryKey("PK_RequestPriorities", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "RequestStatuses",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RequestStatuses", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "RequestTopics",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RequestTopics", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -81,7 +109,9 @@ namespace diplom_1.Migrations
                     Email = table.Column<string>(type: "text", nullable: false),
                     Password = table.Column<string>(type: "text", nullable: false),
                     FullName = table.Column<string>(type: "text", nullable: false),
-                    PhotoPath = table.Column<string>(type: "text", nullable: true)
+                    PhotoPath = table.Column<string>(type: "text", nullable: true),
+                    ResetToken = table.Column<string>(type: "text", nullable: true),
+                    IsSuperAdmin = table.Column<bool>(type: "boolean", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -109,47 +139,25 @@ namespace diplom_1.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Editions",
+                name: "OrganizationProducts",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Name = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: false),
+                    OrganizationId = table.Column<int>(type: "integer", nullable: false),
                     ProductId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Editions", x => x.Id);
+                    table.PrimaryKey("PK_OrganizationProducts", x => new { x.OrganizationId, x.ProductId });
                     table.ForeignKey(
-                        name: "FK_Editions_Products_ProductId",
+                        name: "FK_OrganizationProducts_Organizations_OrganizationId",
+                        column: x => x.OrganizationId,
+                        principalTable: "Organizations",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_OrganizationProducts_Products_ProductId",
                         column: x => x.ProductId,
                         principalTable: "Products",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "RolePermissions",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    RoleId = table.Column<int>(type: "integer", nullable: false),
-                    PermissionId = table.Column<int>(type: "integer", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_RolePermissions", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_RolePermissions_Permissions_PermissionId",
-                        column: x => x.PermissionId,
-                        principalTable: "Permissions",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_RolePermissions_Roles_RoleId",
-                        column: x => x.RoleId,
-                        principalTable: "Roles",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -186,11 +194,12 @@ namespace diplom_1.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Title = table.Column<string>(type: "text", nullable: false),
                     Description = table.Column<string>(type: "text", nullable: false),
-                    Topic = table.Column<string>(type: "text", nullable: false),
+                    RequestTopicId = table.Column<int>(type: "integer", nullable: false),
                     ProductId = table.Column<int>(type: "integer", nullable: true),
-                    Priority = table.Column<string>(type: "text", nullable: false),
-                    Status = table.Column<string>(type: "text", nullable: false),
+                    RequestPriorityId = table.Column<int>(type: "integer", nullable: false),
+                    RequestStatusId = table.Column<int>(type: "integer", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    EstimatedHours = table.Column<double>(type: "double precision", nullable: true),
                     CreatedById = table.Column<int>(type: "integer", nullable: true),
                     OrganizationId = table.Column<int>(type: "integer", nullable: true),
                     BranchId = table.Column<int>(type: "integer", nullable: true)
@@ -216,6 +225,24 @@ namespace diplom_1.Migrations
                         principalTable: "Products",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_Requests_RequestPriorities_RequestPriorityId",
+                        column: x => x.RequestPriorityId,
+                        principalTable: "RequestPriorities",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Requests_RequestStatuses_RequestStatusId",
+                        column: x => x.RequestStatusId,
+                        principalTable: "RequestStatuses",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Requests_RequestTopics_RequestTopicId",
+                        column: x => x.RequestTopicId,
+                        principalTable: "RequestTopics",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_Requests_Users_CreatedById",
                         column: x => x.CreatedById,
@@ -289,34 +316,6 @@ namespace diplom_1.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Licenses",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Name = table.Column<string>(type: "text", nullable: false),
-                    Article = table.Column<string>(type: "text", nullable: true),
-                    PaymentPeriod = table.Column<string>(type: "text", nullable: true),
-                    Description = table.Column<string>(type: "text", nullable: true),
-                    ProductId = table.Column<int>(type: "integer", nullable: true),
-                    EditionId = table.Column<int>(type: "integer", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Licenses", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Licenses_Editions_EditionId",
-                        column: x => x.EditionId,
-                        principalTable: "Editions",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_Licenses_Products_ProductId",
-                        column: x => x.ProductId,
-                        principalTable: "Products",
-                        principalColumn: "Id");
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Comments",
                 columns: table => new
                 {
@@ -352,77 +351,31 @@ namespace diplom_1.Migrations
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     RequestId = table.Column<int>(type: "integer", nullable: false),
-                    Status = table.Column<string>(type: "text", nullable: false),
+                    RequestStatusId = table.Column<int>(type: "integer", nullable: false),
+                    ChangedById = table.Column<int>(type: "integer", nullable: true),
                     ChangedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_RequestStatusHistories", x => x.Id);
                     table.ForeignKey(
+                        name: "FK_RequestStatusHistories_RequestStatuses_RequestStatusId",
+                        column: x => x.RequestStatusId,
+                        principalTable: "RequestStatuses",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
                         name: "FK_RequestStatusHistories_Requests_RequestId",
                         column: x => x.RequestId,
                         principalTable: "Requests",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Computers",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    BranchId = table.Column<int>(type: "integer", nullable: true),
-                    LicenseId = table.Column<int>(type: "integer", nullable: true),
-                    OrganizationId = table.Column<int>(type: "integer", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Computers", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Computers_Branches_BranchId",
-                        column: x => x.BranchId,
-                        principalTable: "Branches",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_Computers_Licenses_LicenseId",
-                        column: x => x.LicenseId,
-                        principalTable: "Licenses",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_Computers_Organizations_OrganizationId",
-                        column: x => x.OrganizationId,
-                        principalTable: "Organizations",
-                        principalColumn: "Id");
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Modules",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    Article = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
-                    PaymentPeriod = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
-                    Description = table.Column<string>(type: "text", nullable: true),
-                    ProductId = table.Column<int>(type: "integer", nullable: true),
-                    LicenseId = table.Column<int>(type: "integer", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Modules", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Modules_Licenses_LicenseId",
-                        column: x => x.LicenseId,
-                        principalTable: "Licenses",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_Modules_Products_ProductId",
-                        column: x => x.ProductId,
-                        principalTable: "Products",
-                        principalColumn: "Id");
+                        name: "FK_RequestStatusHistories_Users_ChangedById",
+                        column: x => x.ChangedById,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -444,73 +397,49 @@ namespace diplom_1.Migrations
                         column: x => x.CommentId,
                         principalTable: "Comments",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_Attachments_Requests_RequestId",
                         column: x => x.RequestId,
                         principalTable: "Requests",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
-            migrationBuilder.CreateTable(
-                name: "ComputerLicenses",
-                columns: table => new
+            migrationBuilder.InsertData(
+                table: "RequestPriorities",
+                columns: new[] { "Id", "Name" },
+                values: new object[,]
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    ComputerName = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    LicenseId = table.Column<int>(type: "integer", nullable: false),
-                    ComputerId = table.Column<int>(type: "integer", nullable: false),
-                    BranchId = table.Column<int>(type: "integer", nullable: true),
-                    ProductId = table.Column<int>(type: "integer", nullable: true),
-                    EditionId = table.Column<int>(type: "integer", nullable: true),
-                    ModuleId = table.Column<int>(type: "integer", nullable: true),
-                    OrganizationId = table.Column<int>(type: "integer", nullable: true),
-                    StartDate = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    EndDate = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    Status = table.Column<string>(type: "text", nullable: false)
-                },
-                constraints: table =>
+                    { 1, "Низкий" },
+                    { 2, "Средний" },
+                    { 3, "Высокий" },
+                    { 4, "Критический" }
+                });
+
+            migrationBuilder.InsertData(
+                table: "RequestStatuses",
+                columns: new[] { "Id", "Name" },
+                values: new object[,]
                 {
-                    table.PrimaryKey("PK_ComputerLicenses", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_ComputerLicenses_Branches_BranchId",
-                        column: x => x.BranchId,
-                        principalTable: "Branches",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_ComputerLicenses_Computers_ComputerId",
-                        column: x => x.ComputerId,
-                        principalTable: "Computers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_ComputerLicenses_Editions_EditionId",
-                        column: x => x.EditionId,
-                        principalTable: "Editions",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_ComputerLicenses_Licenses_LicenseId",
-                        column: x => x.LicenseId,
-                        principalTable: "Licenses",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_ComputerLicenses_Modules_ModuleId",
-                        column: x => x.ModuleId,
-                        principalTable: "Modules",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_ComputerLicenses_Organizations_OrganizationId",
-                        column: x => x.OrganizationId,
-                        principalTable: "Organizations",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_ComputerLicenses_Products_ProductId",
-                        column: x => x.ProductId,
-                        principalTable: "Products",
-                        principalColumn: "Id");
+                    { 1, "Создана" },
+                    { 2, "В работе" },
+                    { 3, "Завершена" },
+                    { 4, "Отменена" },
+                    { 5, "Уточнение" },
+                    { 6, "Ожидание" }
+                });
+
+            migrationBuilder.InsertData(
+                table: "RequestTopics",
+                columns: new[] { "Id", "Name" },
+                values: new object[,]
+                {
+                    { 1, "Техническая проблема" },
+                    { 2, "Консультация" },
+                    { 3, "Настройка" },
+                    { 4, "Доработка" },
+                    { 5, "Другое" }
                 });
 
             migrationBuilder.CreateIndex(
@@ -539,79 +468,15 @@ namespace diplom_1.Migrations
                 column: "RequestId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_ComputerLicenses_BranchId",
-                table: "ComputerLicenses",
-                column: "BranchId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ComputerLicenses_ComputerId",
-                table: "ComputerLicenses",
-                column: "ComputerId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ComputerLicenses_EditionId",
-                table: "ComputerLicenses",
-                column: "EditionId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ComputerLicenses_LicenseId",
-                table: "ComputerLicenses",
-                column: "LicenseId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ComputerLicenses_ModuleId",
-                table: "ComputerLicenses",
-                column: "ModuleId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ComputerLicenses_OrganizationId",
-                table: "ComputerLicenses",
-                column: "OrganizationId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ComputerLicenses_ProductId",
-                table: "ComputerLicenses",
+                name: "IX_OrganizationProducts_ProductId",
+                table: "OrganizationProducts",
                 column: "ProductId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Computers_BranchId",
-                table: "Computers",
-                column: "BranchId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Computers_LicenseId",
-                table: "Computers",
-                column: "LicenseId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Computers_OrganizationId",
-                table: "Computers",
-                column: "OrganizationId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Editions_ProductId",
-                table: "Editions",
-                column: "ProductId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Licenses_EditionId",
-                table: "Licenses",
-                column: "EditionId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Licenses_ProductId",
-                table: "Licenses",
-                column: "ProductId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Modules_LicenseId",
-                table: "Modules",
-                column: "LicenseId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Modules_ProductId",
-                table: "Modules",
-                column: "ProductId");
+                name: "IX_RequestPriorities_Name",
+                table: "RequestPriorities",
+                column: "Name",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Requests_BranchId",
@@ -634,19 +499,46 @@ namespace diplom_1.Migrations
                 column: "ProductId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Requests_RequestPriorityId",
+                table: "Requests",
+                column: "RequestPriorityId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Requests_RequestStatusId",
+                table: "Requests",
+                column: "RequestStatusId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Requests_RequestTopicId",
+                table: "Requests",
+                column: "RequestTopicId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RequestStatuses_Name",
+                table: "RequestStatuses",
+                column: "Name",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RequestStatusHistories_ChangedById",
+                table: "RequestStatusHistories",
+                column: "ChangedById");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_RequestStatusHistories_RequestId",
                 table: "RequestStatusHistories",
                 column: "RequestId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_RolePermissions_PermissionId",
-                table: "RolePermissions",
-                column: "PermissionId");
+                name: "IX_RequestStatusHistories_RequestStatusId",
+                table: "RequestStatusHistories",
+                column: "RequestStatusId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_RolePermissions_RoleId",
-                table: "RolePermissions",
-                column: "RoleId");
+                name: "IX_RequestTopics_Name",
+                table: "RequestTopics",
+                column: "Name",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_UserBranches_BranchId",
@@ -686,13 +578,10 @@ namespace diplom_1.Migrations
                 name: "Attachments");
 
             migrationBuilder.DropTable(
-                name: "ComputerLicenses");
+                name: "OrganizationProducts");
 
             migrationBuilder.DropTable(
                 name: "RequestStatusHistories");
-
-            migrationBuilder.DropTable(
-                name: "RolePermissions");
 
             migrationBuilder.DropTable(
                 name: "UserBranches");
@@ -707,37 +596,31 @@ namespace diplom_1.Migrations
                 name: "Comments");
 
             migrationBuilder.DropTable(
-                name: "Computers");
-
-            migrationBuilder.DropTable(
-                name: "Modules");
-
-            migrationBuilder.DropTable(
-                name: "Roles");
-
-            migrationBuilder.DropTable(
                 name: "Permissions");
 
             migrationBuilder.DropTable(
                 name: "Requests");
 
             migrationBuilder.DropTable(
-                name: "Licenses");
+                name: "Branches");
 
             migrationBuilder.DropTable(
-                name: "Branches");
+                name: "Products");
+
+            migrationBuilder.DropTable(
+                name: "RequestPriorities");
+
+            migrationBuilder.DropTable(
+                name: "RequestStatuses");
+
+            migrationBuilder.DropTable(
+                name: "RequestTopics");
 
             migrationBuilder.DropTable(
                 name: "Users");
 
             migrationBuilder.DropTable(
-                name: "Editions");
-
-            migrationBuilder.DropTable(
                 name: "Organizations");
-
-            migrationBuilder.DropTable(
-                name: "Products");
         }
     }
 }

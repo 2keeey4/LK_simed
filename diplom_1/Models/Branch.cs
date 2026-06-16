@@ -3,7 +3,7 @@
     public class Branch
     {
         public int Id { get; set; }
-        public string Address { get; set; } = string.Empty; // переименовано из Name
+        public string Address { get; set; } = string.Empty; 
 
 
         public int OrganizationId { get; set; }

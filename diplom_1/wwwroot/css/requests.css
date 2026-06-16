@@ -1,8 +1,4 @@
-﻿/* =========================
-   REQUESTS PAGE — MINIMAL UI
-========================= */
-
-* {
+﻿* {
     box-sizing: border-box;
 }
 
@@ -14,9 +10,6 @@
     font-family: "Segoe UI", Arial, sans-serif;
 }
 
-/* =========================
-   HEADER
-========================= */
 
 .page-header {
     display: flex;
@@ -35,9 +28,6 @@
     letter-spacing: -0.02em;
 }
 
-/* =========================
-   BUTTONS
-========================= */
 
 .btn-primary,
 .btn-secondary,
@@ -95,9 +85,6 @@
         color: #1d4ed8;
     }
 
-/* =========================
-   STATS
-========================= */
 
 .stats-section {
     margin-bottom: 12px;
@@ -155,9 +142,6 @@
     font-weight: 600;
 }
 
-/* =========================
-   FILTERS
-========================= */
 
 .filters-shell {
     margin-bottom: 12px;
@@ -279,9 +263,6 @@
     margin-top: 12px;
 }
 
-/* =========================
-   FILTER DROPDOWNS
-========================= */
 
 .dropdown {
     position: relative;
@@ -575,9 +556,6 @@
     font-size: 13px;
 }
 
-/* =========================
-   TABLE
-========================= */
 
 .table-section {
     overflow: hidden;
@@ -655,9 +633,6 @@
         color: #2563eb;
     }
 
-/* =========================
-   BADGES
-========================= */
 
 .status-badge,
 .priority-badge {
@@ -724,9 +699,6 @@
     color: #b91c1c;
 }
 
-/* =========================
-   MODAL
-========================= */
 
 .modal {
     position: fixed;
@@ -898,9 +870,6 @@
         line-height: 1.35;
     }
 
-/* =========================
-   CUSTOM SELECTS
-========================= */
 
 .native-select-hidden {
     position: absolute !important;
@@ -1031,9 +1000,6 @@
         cursor: not-allowed;
     }
 
-/* =========================
-   ESTIMATE BOX
-========================= */
 
 .estimate-section {
     margin-top: 2px;
@@ -1147,9 +1113,6 @@
     backdrop-filter: blur(6px);
 }
 
-/* =========================
-   TOAST
-========================= */
 
 .toast {
     position: fixed;
@@ -1186,9 +1149,6 @@
     flex-wrap: wrap;
 }
 
-/* =========================
-   TABLE PAGINATION
-========================= */
 
 .table-pagination {
     display: flex;
@@ -1320,9 +1280,6 @@
             background: #1d4ed8;
             border-color: #1d4ed8;
         }
-/* =========================
-   RESPONSIVE
-========================= */
 
 @media (max-width: 1180px) {
     .filters-grid {
@@ -1563,9 +1520,6 @@
 }
 
 
-/* =========================
-   ANALYTICS SCOPE BADGES
-========================= */
 
 .chart-card-head {
     display: flex;
@@ -1600,10 +1554,6 @@
         color: #4338ca;
     }
 
-/* =========================
-   CREATE REQUEST MODAL CLICK FIX
-   Добавлено: исправляет кликабельность полей Заголовок и Описание
-========================= */
 
 #createModal .modal-overlay {
     z-index: 0;

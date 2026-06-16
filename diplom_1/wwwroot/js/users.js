@@ -31,6 +31,66 @@ let userSelectedBranches = [];
 
 let userModalActiveTab = "tab-general";
 
+
+function clearBrowserAutofillFromSearchFields(force = false) {
+    const searchIds = ["searchUser", "searchOrg", "searchBranch"];
+
+    searchIds.forEach(id => {
+        const input = document.getElementById(id);
+        if (!input) return;
+
+        input.setAttribute("autocomplete", "new-password");
+        input.setAttribute("data-lpignore", "true");
+        input.setAttribute("data-1p-ignore", "true");
+        input.setAttribute("data-form-type", "other");
+
+        if (!input.dataset.autofillProtected) {
+            input.dataset.autofillProtected = "true";
+            input.dataset.userTouched = "false";
+
+            const markTouched = () => {
+                input.dataset.userTouched = "true";
+                input.removeAttribute("readonly");
+            };
+
+            input.addEventListener("pointerdown", markTouched, { once: true });
+            input.addEventListener("keydown", markTouched, { once: true });
+            input.addEventListener("focus", () => {
+                input.removeAttribute("readonly");
+            });
+        }
+
+        if (force || input.dataset.userTouched !== "true") {
+            if (input.value) {
+                input.value = "";
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+        }
+    });
+}
+
+function initSearchAutofillProtection() {
+    const delays = [0, 50, 150, 350, 700, 1200, 2000, 3500];
+
+    delays.forEach(delay => {
+        setTimeout(() => clearBrowserAutofillFromSearchFields(true), delay);
+    });
+
+    window.addEventListener("pageshow", () => {
+        setTimeout(() => clearBrowserAutofillFromSearchFields(true), 50);
+        setTimeout(() => clearBrowserAutofillFromSearchFields(true), 400);
+    });
+}
+
+function keepUserModalTab() {
+    const modal = document.getElementById("userModal");
+    if (!modal || modal.style.display === "none") return;
+
+    requestAnimationFrame(() => {
+        switchUserModalTab(userModalActiveTab || "tab-general", false);
+    });
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
     await loadDictionaries();
     await loadOrgs();
@@ -45,12 +105,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         originalBranchOrder = Array.from(document.querySelectorAll("#branchesBody tr"));
     }, 500);
 
-    setTimeout(() => {
-        ["searchUser", "searchOrg", "searchBranch"].forEach(id => {
-            const field = document.getElementById(id);
-            if (field) field.value = "";
-        });
-    }, 100);
+    initSearchAutofillProtection();
+
+    setTimeout(clearBrowserAutofillFromSearchFields, 100);
+    setTimeout(clearBrowserAutofillFromSearchFields, 600);
 
     initTabs();
     initUserHandlers();
@@ -190,8 +248,11 @@ function initUserHandlers() {
 
     document.getElementById("saveUserBtn")?.addEventListener("click", saveUser);
 
-    document.getElementById("generatePassword")?.addEventListener("click", () => {
+    document.getElementById("generatePassword")?.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
         document.getElementById("password").value = generatePassword();
+        keepUserModalTab();
     });
 
     document.getElementById("uploadPhotoBtn")?.addEventListener("click", () => {
@@ -439,6 +500,7 @@ function openCreateModal() {
 
 function closeModal() {
     document.getElementById("userModal").style.display = "none";
+    userModalActiveTab = "tab-general";
 }
 
 function switchUserModalTab(tabId, forceRenderPermissions = false) {
@@ -503,7 +565,7 @@ function renderPermissions(existing = []) {
                     <input type="checkbox" class="perm-check" ${related.length > 0 ? "checked" : ""}> 
                     ${p.action}
                 </label>
-                <button class="btn small secondary select-orgbranch-btn" 
+                <button type="button" class="btn small secondary select-orgbranch-btn" 
                     data-orgs='${JSON.stringify(orgs)}' 
                     data-branches='${JSON.stringify(branches)}'>
                     Орг: ${orgs.length} | Фил: ${branches.length}
@@ -520,6 +582,8 @@ function renderPermissions(existing = []) {
         });
         container.appendChild(block);
     }
+
+    keepUserModalTab();
 }
 
 function openOrgBranchPopup(preselect = null) {
@@ -1059,7 +1123,7 @@ function openOrgModal() {
         document.getElementById(id).value = ""
     );
     document.getElementById("orgWorkHoursLimit").value = 0;
-    loadProductsForOrg(0);  // ← ДОБАВИТЬ
+    loadProductsForOrg(0);
     document.getElementById("orgModal").style.display = "flex";
 }
 
@@ -1083,7 +1147,7 @@ async function editOrg(id) {
             document.getElementById("orgOgrn").value = org.ogrn || "";
             document.getElementById("orgWorkHoursLimit").value = org.workHoursLimit || 0;
 
-            await loadProductsForOrg(id);  // ← ДОБАВИТЬ
+            await loadProductsForOrg(id);
 
             document.getElementById("orgModalTitle").textContent = canEdit ? "Редактировать организацию" : "Просмотр организации";
 
@@ -1094,7 +1158,7 @@ async function editOrg(id) {
             });
 
             const productCheckboxes = document.querySelectorAll('.org-product-checkbox');
-            productCheckboxes.forEach(cb => cb.disabled = !canEdit);  // ← ДОБАВИТЬ
+            productCheckboxes.forEach(cb => cb.disabled = !canEdit);
 
             const saveBtn = document.getElementById("saveOrgBtn");
             if (saveBtn) saveBtn.style.display = canEdit ? "block" : "none";
@@ -1157,7 +1221,7 @@ async function saveOrg() {
     }
 
     const productIds = Array.from(document.querySelectorAll('.org-product-checkbox:checked'))
-        .map(cb => parseInt(cb.value));  // ← ДОБАВИТЬ
+        .map(cb => parseInt(cb.value));
 
     const payload = {
         id: currentOrgId,
@@ -1166,7 +1230,7 @@ async function saveOrg() {
         kpp: document.getElementById("orgKpp").value.trim(),
         ogrn: document.getElementById("orgOgrn").value.trim(),
         workHoursLimit: parseFloat(document.getElementById("orgWorkHoursLimit").value) || 0,
-        productIds: productIds  // ← ДОБАВИТЬ
+        productIds: productIds
     };
 
     const token = document.querySelector('#antiForgeryForm input[name="__RequestVerificationToken"]')?.value || "";
@@ -1487,7 +1551,7 @@ function initUserFilters() {
 
     if (!orgFilterDropdown) return;
 
-    // Заполняем фильтр организаций
+
     orgFilterDropdown.innerHTML = '<label><input type="checkbox" value="all" checked> Все организации</label>';
     dictionaries.orgs.forEach(org => {
         const label = document.createElement("label");
@@ -1497,42 +1561,38 @@ function initUserFilters() {
         orgFilterDropdown.appendChild(label);
     });
 
-    // Обработчик для фильтра организаций
+
     const orgChangeHandler = (e) => {
         const allCheckbox = orgFilterDropdown.querySelector('input[value="all"]');
         const checkboxes = Array.from(orgFilterDropdown.querySelectorAll('.user-org-filter'));
 
-        // Если кликнули на "Все организации"
+
         if (e && e.target && e.target.value === "all") {
-            // Снимаем все остальные галочки
+
             checkboxes.forEach(cb => cb.checked = false);
             userSelectedOrgs = [];
             if (allCheckbox) allCheckbox.checked = true;
         }
-        // Если кликнули на обычную организацию
+
         else {
             if (allCheckbox) allCheckbox.checked = false;
             userSelectedOrgs = checkboxes.filter(cb => cb.checked).map(cb => parseInt(cb.value));
 
-            // Если ничего не выбрано, то выбираем "Все организации"
             if (userSelectedOrgs.length === 0 && allCheckbox) {
                 allCheckbox.checked = true;
             }
         }
 
-        // Обновляем список филиалов и перезагружаем пользователей
         updateUserBranchFilter();
         loadUsers(1);
     };
 
-    // Удаляем старый обработчик и добавляем новый
     if (orgFilterDropdown._orgHandler) {
         orgFilterDropdown.removeEventListener("change", orgFilterDropdown._orgHandler);
     }
     orgFilterDropdown.addEventListener("change", orgChangeHandler);
     orgFilterDropdown._orgHandler = orgChangeHandler;
 
-    // Заполняем фильтр филиалов
     updateUserBranchFilter();
 }
 
@@ -1562,18 +1622,16 @@ function updateUserBranchFilter() {
         const allCheckbox = branchFilterDropdown.querySelector('input[value="all"]');
         const checkboxes = Array.from(branchFilterDropdown.querySelectorAll('.user-branch-filter'));
 
-        // Если кликнули на "Все филиалы"
+
         if (e && e.target && e.target.value === "all") {
             checkboxes.forEach(cb => cb.checked = false);
             userSelectedBranches = [];
             if (allCheckbox) allCheckbox.checked = true;
         }
-        // Если кликнули на обычный филиал
         else {
             if (allCheckbox) allCheckbox.checked = false;
             userSelectedBranches = checkboxes.filter(cb => cb.checked).map(cb => parseInt(cb.value));
 
-            // Если ничего не выбрано, то выбираем "Все филиалы"
             if (userSelectedBranches.length === 0 && allCheckbox) {
                 allCheckbox.checked = true;
             }
@@ -1841,10 +1899,8 @@ function updateBranchFilter() {
     const dropdown = document.getElementById("branchOrgFilterDropdown");
     if (!dropdown) return;
 
-    // Получаем организации пользователя
     const userOrgIds = dictionaries.orgs.map(org => org.id);
 
-    // Если организация только одна, скрываем весь фильтр
     const filterBtn = document.getElementById("branchOrgFilterBtn");
     if (userOrgIds.length <= 1) {
         if (filterBtn) {
@@ -1857,10 +1913,8 @@ function updateBranchFilter() {
         }
     }
 
-    // Очищаем dropdown, оставляя только заголовок "Все организации"
     dropdown.innerHTML = '<label><input type="checkbox" value="all" checked> Все организации</label>';
 
-    // Добавляем каждую организацию с новой строки
     dictionaries.orgs.forEach(org => {
         const label = document.createElement("label");
         label.style.display = "block";
@@ -1869,7 +1923,6 @@ function updateBranchFilter() {
         dropdown.appendChild(label);
     });
 
-    // Обработчики событий
     dropdown.addEventListener("change", (e) => {
         const checkboxes = Array.from(dropdown.querySelectorAll(".org-filter-checkbox"));
         const allCheckbox = dropdown.querySelector('input[value="all"]');
@@ -1994,11 +2047,7 @@ function escapeHtml(value) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
-/* =========================
-   CLIENT-SIDE PAGINATION FIX
-   Не меняет модалки/сохранение/права. Исправляет только вывод таблиц,
-   чтобы лишние пустые страницы не показывались после поиска/фильтров.
-========================= */
+
 
 let managementAllUsers = [];
 let managementAllOrgs = [];

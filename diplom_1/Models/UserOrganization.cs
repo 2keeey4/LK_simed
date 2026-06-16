@@ -3,10 +3,10 @@
     public class UserOrganization
     {
         public int UserId { get; set; }
-        public User User { get; set; } = null!; // обязательно инициализируем
+        public User User { get; set; } = null!; 
 
         public int OrganizationId { get; set; }
-        public Organization Organization { get; set; } = null!; // обязательно инициализируем
+        public Organization Organization { get; set; } = null!; 
 
     }
 }

@@ -1043,21 +1043,7 @@ namespace diplom_1.Pages.Users
                     .ToListAsync<dynamic>();
             }
 
-            object? roles = null;
-
-            if (isSuperAdmin)
-            {
-                roles = await _context.Roles
-                    .Include(r => r.RolePermissions)
-                    .ThenInclude(rp => rp.Permission)
-                    .Select(r => new
-                    {
-                        id = r.Id,
-                        name = r.Name,
-                        permissions = r.RolePermissions.Select(rp => rp.PermissionId).ToList()
-                    })
-                    .ToListAsync();
-            }
+            var roles = Array.Empty<object>();
 
             return new JsonResult(new
             {

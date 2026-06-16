@@ -16,6 +16,11 @@
 
 <div class="admin-container">
 
+    <form class="autofill-decoy" autocomplete="off" aria-hidden="true">
+        <input type="text" name="username" autocomplete="username" tabindex="-1" />
+        <input type="password" name="password" autocomplete="current-password" tabindex="-1" />
+    </form>
+
     <div class="main-tabs">
         <button class="main-tab active" data-tab="tab-users">Пользователи</button>
         <button class="main-tab" data-tab="tab-orgs">Организации</button>
@@ -25,8 +30,17 @@
     <div id="tab-users" class="tab-section active">
         <div class="section-header">
             <div class="filter-group">
-                <input type="text"
+                <input type="search"
                        id="searchUser"
+                       name="q_user_filter_no_login"
+                       autocomplete="new-password"
+                       autocapitalize="off"
+                       spellcheck="false"
+                       inputmode="search"
+                       readonly
+                       data-lpignore="true"
+                       data-1p-ignore="true"
+                       data-form-type="other"
                        placeholder="Поиск по ФИО, логину, email..."
                        class="search-input" />
 
@@ -128,6 +142,10 @@
             <div class="filter-group">
                 <input type="text"
                        id="searchOrg"
+                       name="org_search_filter"
+                       autocomplete="off"
+                       autocapitalize="off"
+                       spellcheck="false"
                        placeholder="Поиск по названию..."
                        class="search-input" />
 
@@ -181,6 +199,10 @@
 
                 <input type="text"
                        id="searchBranch"
+                       name="branch_search_filter"
+                       autocomplete="off"
+                       autocapitalize="off"
+                       spellcheck="false"
                        placeholder="Поиск по названию филиала..."
                        class="search-input" />
 
@@ -221,6 +243,11 @@
             <h3 id="modalTitle">Редактирование пользователя</h3>
         </div>
 
+        <div class="autofill-guard" aria-hidden="true">
+            <input type="text" name="fake_login" autocomplete="username" tabindex="-1" />
+            <input type="password" name="fake_password" autocomplete="current-password" tabindex="-1" />
+        </div>
+
         <div class="modal-tabs">
             <button class="tab-button active" data-tab="tab-general" type="button">
                 Основное
@@ -259,6 +286,8 @@
                             ФИО
                             <input type="text"
                                    id="fullName"
+                                   name="user_full_name"
+                                   autocomplete="name"
                                    placeholder="Введите ФИО" />
                         </label>
 
@@ -266,6 +295,8 @@
                             Email
                             <input type="email"
                                    id="email"
+                                   name="user_email"
+                                   autocomplete="email"
                                    placeholder="Введите email" />
                         </label>
                     </div>
@@ -275,6 +306,8 @@
                             Логин
                             <input type="text"
                                    id="login"
+                                   name="user_login"
+                                   autocomplete="username"
                                    placeholder="Введите логин" />
                         </label>
 
@@ -283,6 +316,8 @@
                             <div class="password-wrapper">
                                 <input type="password"
                                        id="password"
+                                       name="new_user_password"
+                                       autocomplete="new-password"
                                        placeholder="Оставьте пустым" />
 
                                 <button type="button"

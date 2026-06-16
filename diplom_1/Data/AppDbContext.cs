@@ -20,12 +20,7 @@ namespace diplom_1.Data
         public DbSet<RequestStatusHistory> RequestStatusHistories { get; set; }
 
         public DbSet<Product> Products { get; set; }
-
-        public DbSet<Computer> Computers { get; set; }
-        public DbSet<ComputerLicense> ComputerLicenses { get; set; }
-        public DbSet<License> Licenses { get; set; }
-        public DbSet<Edition> Editions { get; set; }
-        public DbSet<Module> Modules { get; set; }
+        public DbSet<OrganizationProduct> OrganizationProducts { get; set; }
 
         public DbSet<Comment> Comments { get; set; }
         public DbSet<Attachment> Attachments { get; set; }
@@ -33,18 +28,9 @@ namespace diplom_1.Data
         public DbSet<Permission> Permissions { get; set; }
         public DbSet<UserPermission> UserPermissions { get; set; }
 
-        public DbSet<Role> Roles { get; set; }
-        public DbSet<RolePermission> RolePermissions { get; set; }
-
-        public DbSet<OrganizationProduct> OrganizationProducts { get; set; }
-
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-
-            /* =========================
-               USER - ORGANIZATION
-            ========================= */
 
             modelBuilder.Entity<UserOrganization>()
                 .HasKey(uo => new { uo.UserId, uo.OrganizationId });
@@ -61,10 +47,6 @@ namespace diplom_1.Data
                 .HasForeignKey(uo => uo.OrganizationId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            /* =========================
-               USER - BRANCH
-            ========================= */
-
             modelBuilder.Entity<UserBranch>()
                 .HasKey(ub => new { ub.UserId, ub.BranchId });
 
@@ -79,10 +61,6 @@ namespace diplom_1.Data
                 .WithMany(b => b.UserBranches)
                 .HasForeignKey(ub => ub.BranchId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            /* =========================
-               USER PERMISSIONS
-            ========================= */
 
             modelBuilder.Entity<UserPermission>()
                 .HasOne(up => up.User)
@@ -108,26 +86,6 @@ namespace diplom_1.Data
                 .HasForeignKey(up => up.BranchId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            /* =========================
-               ROLE PERMISSIONS
-            ========================= */
-
-            modelBuilder.Entity<RolePermission>()
-                .HasOne(rp => rp.Role)
-                .WithMany(r => r.RolePermissions)
-                .HasForeignKey(rp => rp.RoleId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<RolePermission>()
-                .HasOne(rp => rp.Permission)
-                .WithMany(p => p.RolePermissions)
-                .HasForeignKey(rp => rp.PermissionId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            /* =========================
-               ORGANIZATION PRODUCTS
-            ========================= */
-
             modelBuilder.Entity<OrganizationProduct>()
                 .HasKey(op => new { op.OrganizationId, op.ProductId });
 
@@ -142,10 +100,6 @@ namespace diplom_1.Data
                 .WithMany(p => p.OrganizationProducts)
                 .HasForeignKey(op => op.ProductId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            /* =========================
-               REQUEST DICTIONARIES
-            ========================= */
 
             modelBuilder.Entity<RequestTopic>(entity =>
             {
@@ -189,10 +143,6 @@ namespace diplom_1.Data
                 );
             });
 
-            /* =========================
-               REQUEST
-            ========================= */
-
             modelBuilder.Entity<Request>(entity =>
             {
                 entity.HasOne(r => r.CreatedBy)
@@ -231,10 +181,6 @@ namespace diplom_1.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            /* =========================
-               REQUEST STATUS HISTORY
-            ========================= */
-
             modelBuilder.Entity<RequestStatusHistory>(entity =>
             {
                 entity.HasOne(h => h.Request)
@@ -253,10 +199,6 @@ namespace diplom_1.Data
                     .OnDelete(DeleteBehavior.SetNull);
             });
 
-            /* =========================
-               COMMENTS
-            ========================= */
-
             modelBuilder.Entity<Comment>()
                 .HasOne(c => c.Request)
                 .WithMany(r => r.Comments)
@@ -269,10 +211,6 @@ namespace diplom_1.Data
                 .HasForeignKey(c => c.AuthorId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            /* =========================
-               ATTACHMENTS
-            ========================= */
-
             modelBuilder.Entity<Attachment>()
                 .HasOne(a => a.Request)
                 .WithMany(r => r.Attachments)
@@ -284,16 +222,6 @@ namespace diplom_1.Data
                 .WithMany(c => c.Attachments)
                 .HasForeignKey(a => a.CommentId)
                 .OnDelete(DeleteBehavior.Restrict);
-
-            /* =========================
-               PRODUCT - MODULE
-            ========================= */
-
-            modelBuilder.Entity<Module>()
-                .HasOne(m => m.Product)
-                .WithMany(p => p.Modules)
-                .HasForeignKey(m => m.ProductId)
-                .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }
