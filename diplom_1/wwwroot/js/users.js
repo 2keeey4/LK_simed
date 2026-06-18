@@ -34,12 +34,13 @@ let userModalActiveTab = "tab-general";
 
 function clearBrowserAutofillFromSearchFields(force = false) {
     const searchIds = ["searchUser", "searchOrg", "searchBranch"];
+    let cleared = false;
 
     searchIds.forEach(id => {
         const input = document.getElementById(id);
         if (!input) return;
 
-        input.setAttribute("autocomplete", "new-password");
+        input.setAttribute("autocomplete", "off");
         input.setAttribute("data-lpignore", "true");
         input.setAttribute("data-1p-ignore", "true");
         input.setAttribute("data-form-type", "other");
@@ -55,17 +56,80 @@ function clearBrowserAutofillFromSearchFields(force = false) {
 
             input.addEventListener("pointerdown", markTouched, { once: true });
             input.addEventListener("keydown", markTouched, { once: true });
-            input.addEventListener("focus", () => {
-                input.removeAttribute("readonly");
-            });
+            input.addEventListener("focus", () => input.removeAttribute("readonly"));
         }
 
-        if (force || input.dataset.userTouched !== "true") {
+        const canClear = force || input.dataset.userTouched !== "true";
+        if (canClear && input.value) {
+            input.value = "";
+            cleared = true;
+        }
+    });
+
+    if (cleared) {
+        rerenderAfterSilentSearchClear();
+    }
+}
+
+function rerenderAfterSilentSearchClear() {
+    try {
+        if (typeof renderUsersPage === "function" && Array.isArray(window.managementAllUsers || managementAllUsers)) {
+            userCurrentPage = 1;
+            renderUsersPage();
+        }
+    } catch { }
+
+    try {
+        if (typeof renderOrgsPage === "function" && Array.isArray(window.managementAllOrgs || managementAllOrgs)) {
+            orgCurrentPage = 1;
+            renderOrgsPage();
+        }
+    } catch { }
+
+    try {
+        if (typeof renderBranchesPage === "function" && Array.isArray(window.managementAllBranches || managementAllBranches)) {
+            branchCurrentPage = 1;
+            renderBranchesPage();
+        }
+    } catch { }
+}
+
+function protectUserPasswordField() {
+    const input = document.getElementById("password");
+    if (!input) return;
+
+    input.setAttribute("autocomplete", "new-password");
+    input.setAttribute("data-lpignore", "true");
+    input.setAttribute("data-1p-ignore", "true");
+    input.setAttribute("data-form-type", "other");
+
+    if (!input.dataset.passwordProtectionBound) {
+        input.dataset.passwordProtectionBound = "true";
+        input.dataset.userTouchedPassword = "false";
+
+        const markPasswordTouched = () => {
+            if (input.dataset.allowGeneratedPassword === "true") return;
+            input.dataset.userTouchedPassword = "true";
+        };
+
+        input.addEventListener("keydown", markPasswordTouched);
+        input.addEventListener("paste", markPasswordTouched);
+        input.addEventListener("pointerdown", () => {
             if (input.value) {
                 input.value = "";
-                input.dispatchEvent(new Event("input", { bubbles: true }));
             }
-        }
+        });
+    }
+
+    input.dataset.allowGeneratedPassword = "false";
+    input.dataset.userTouchedPassword = "false";
+
+    [0, 60, 180, 400, 800, 1300, 2000].forEach(delay => {
+        setTimeout(() => {
+            if (input.dataset.allowGeneratedPassword === "true") return;
+            if (input.dataset.userTouchedPassword === "true") return;
+            if (input.value) input.value = "";
+        }, delay);
     });
 }
 
@@ -251,7 +315,10 @@ function initUserHandlers() {
     document.getElementById("generatePassword")?.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
-        document.getElementById("password").value = generatePassword();
+        const passwordInput = document.getElementById("password");
+        passwordInput.dataset.allowGeneratedPassword = "true";
+        passwordInput.dataset.userTouchedPassword = "true";
+        passwordInput.value = generatePassword();
         keepUserModalTab();
     });
 
@@ -316,6 +383,7 @@ function initPermissionHandlers() {
     document.getElementById("openGlobalSelector")?.addEventListener("click", () => {
         const selectedOrgs = Array.from(document.querySelectorAll(".org-checkbox:checked")).map(cb => parseInt(cb.value));
         const selectedBranches = Array.from(document.querySelectorAll(".branch-checkbox:checked")).map(cb => parseInt(cb.value));
+        syncMainOrgBranchSelection(selectedOrgs, selectedBranches);
         globalSelected = { orgs: selectedOrgs, branches: selectedBranches };
         openOrgBranchPopup();
     });
@@ -393,6 +461,7 @@ async function openEditModal(id) {
         document.getElementById("email").value = data.email || "";
         document.getElementById("login").value = data.login || "";
         document.getElementById("password").value = "";
+        protectUserPasswordField();
 
         const isSuperAdminCheckbox = document.getElementById("isSuperAdmin");
 
@@ -458,6 +527,7 @@ async function openEditModal(id) {
         renderPermissions(currentPermissions);
 
         document.getElementById("userModal").style.display = "flex";
+        protectUserPasswordField();
         switchUserModalTab("tab-general", false);
     } catch (error) {
         console.error("Ошибка загрузки пользователя:", error);
@@ -475,6 +545,7 @@ function openCreateModal() {
     ["fullName", "email", "login", "password"].forEach(id =>
         document.getElementById(id).value = ""
     );
+    protectUserPasswordField();
 
     const isSuperAdminCheckbox = document.getElementById("isSuperAdmin");
     if (isSuperAdminCheckbox) {
@@ -491,8 +562,9 @@ function openCreateModal() {
     document.querySelectorAll(".toggle-branches").forEach(t => t.textContent = "▸");
 
     renderPermissions(currentPermissions);
-
-
+    globalSelected = { orgs: [], branches: [] };
+    const openGlobalSelector = document.getElementById("openGlobalSelector");
+    if (openGlobalSelector) openGlobalSelector.textContent = "Выбрать организации и филиалы";
 
     document.getElementById("userModal").style.display = "flex";
     switchUserModalTab("tab-general", false);
@@ -705,6 +777,8 @@ function openPermissionSelector(permissionId, button) {
         const selectedOrgs = Array.from(document.querySelectorAll(".popup-org-check:checked")).map(cb => parseInt(cb.value));
         const selectedBranches = Array.from(document.querySelectorAll(".popup-branch-check:checked")).map(cb => parseInt(cb.value));
 
+        syncMainOrgBranchSelection(selectedOrgs, selectedBranches);
+
         button.dataset.orgs = JSON.stringify(selectedOrgs);
         button.dataset.branches = JSON.stringify(selectedBranches);
         button.textContent = `Орг: ${selectedOrgs.length} | Фил: ${selectedBranches.length}`;
@@ -713,10 +787,44 @@ function openPermissionSelector(permissionId, button) {
     };
 }
 
+
+function syncMainOrgBranchSelection(selectedOrgs = [], selectedBranches = []) {
+    const orgSet = new Set((selectedOrgs || []).map(Number).filter(Boolean));
+    const branchSet = new Set((selectedBranches || []).map(Number).filter(Boolean));
+
+    dictionaries.orgs.forEach(org => {
+        (org.branches || []).forEach(branch => {
+            if (branchSet.has(Number(branch.id))) {
+                orgSet.add(Number(org.id));
+            }
+        });
+    });
+
+    orgSet.forEach(orgId => {
+        const orgCheckbox = document.querySelector(`.org-checkbox[value="${orgId}"]`);
+        if (orgCheckbox) {
+            orgCheckbox.checked = true;
+        }
+    });
+
+    branchSet.forEach(branchId => {
+        const branchCheckbox = document.querySelector(`.branch-checkbox[value="${branchId}"]`);
+        if (branchCheckbox) {
+            branchCheckbox.checked = true;
+            const orgId = Number(branchCheckbox.dataset.org || 0);
+            const orgCheckbox = document.querySelector(`.org-checkbox[value="${orgId}"]`);
+            if (orgCheckbox) {
+                orgCheckbox.checked = true;
+            }
+        }
+    });
+}
+
 function savePopupSelection() {
     const selectedOrgs = Array.from(document.querySelectorAll(".popup-org-check:checked")).map(cb => parseInt(cb.value));
     const selectedBranches = Array.from(document.querySelectorAll(".popup-branch-check:checked")).map(cb => parseInt(cb.value));
 
+    syncMainOrgBranchSelection(selectedOrgs, selectedBranches);
     globalSelected = { orgs: selectedOrgs, branches: selectedBranches };
 
     const openBtn = document.getElementById("openGlobalSelector");
@@ -739,6 +847,8 @@ function applyToAllPermissions() {
         return;
     }
 
+    syncMainOrgBranchSelection(globalSelected.orgs, globalSelected.branches);
+
     document.querySelectorAll(".select-orgbranch-btn").forEach(btn => {
         btn.dataset.orgs = JSON.stringify(globalSelected.orgs);
         btn.dataset.branches = JSON.stringify(globalSelected.branches);
@@ -749,96 +859,62 @@ function applyToAllPermissions() {
 }
 
 function applyRolePattern(roleName) {
+    const normalize = value => String(value || "").trim().toLowerCase();
+
     const rolePatterns = {
-        "Администратор": [
-            "Просмотр",
-            "Добавление",
-            "Редактирование",
-            "Удаление",
-
-            "Добавление внешних комментариев",
-            "Редактирование внешних комментариев",
-            "Удаление внешних комментариев",
-
-            "Просмотр внутренних комментариев",
-            "Добавление внутренних комментариев",
-            "Редактирование внутренних комментариев",
-            "Удаление внутренних комментариев",
-
-            "Аналитика",
-            "Статистика",
-            "Создать от имени другого пользователя",
-            "Просмотр столбца клиент"
+        "Администратор": "all",
+        "Руководитель": [
+            ["Задачи", "Просмотр"],
+            ["Задачи", "Просмотр внешних комментариев"],
+            ["Задачи", "Просмотр внутренних комментариев"],
+            ["Задачи", "Аналитика"],
+            ["Задачи", "Статистика"],
+            ["Задачи", "Просмотр столбца клиент"],
+            ["Организации", "Просмотр"],
+            ["Филиалы", "Просмотр"]
         ],
-
-        "Директор": [
-            "Просмотр",
-
-            "Просмотр внутренних комментариев",
-
-            "Аналитика",
-            "Статистика",
-            "Просмотр столбца клиент"
+        "Клиент": [
+            ["Задачи", "Просмотр"],
+            ["Задачи", "Добавление"],
+            ["Задачи", "Редактирование"],
+            ["Задачи", "Просмотр внешних комментариев"],
+            ["Задачи", "Добавление внешних комментариев"],
+            ["Задачи", "Редактирование внешних комментариев"],
+            ["Организации", "Просмотр"],
+            ["Филиалы", "Просмотр"]
         ],
-
-        "Врач": [
-            "Просмотр",
-            "Добавление",
-            "Редактирование",
-
-            "Добавление внешних комментариев",
-            "Редактирование внешних комментариев",
-
-            "Просмотр внутренних комментариев",
-            "Добавление внутренних комментариев",
-            "Редактирование внутренних комментариев",
-
-            "Статистика",
-            "Просмотр столбца клиент"
+        "Специалист поддержки": [
+            ["Задачи", "Просмотр"],
+            ["Задачи", "Редактирование"],
+            ["Задачи", "Изменение статуса"],
+            ["Задачи", "Просмотр внешних комментариев"],
+            ["Задачи", "Добавление внешних комментариев"],
+            ["Задачи", "Редактирование внешних комментариев"],
+            ["Задачи", "Просмотр внутренних комментариев"],
+            ["Задачи", "Добавление внутренних комментариев"],
+            ["Задачи", "Редактирование внутренних комментариев"],
+            ["Задачи", "Просмотр столбца клиент"],
+            ["Задачи", "Статистика"],
+            ["Организации", "Просмотр"],
+            ["Филиалы", "Просмотр"]
         ],
-
-        "Менеджер": [
-            "Просмотр",
-            "Добавление",
-            "Редактирование",
-
-            "Добавление внешних комментариев",
-            "Редактирование внешних комментариев",
-
-            "Просмотр столбца клиент"
-        ],
-
-        "Программист": [
-            "Просмотр",
-
-            "Просмотр внутренних комментариев",
-            "Добавление внутренних комментариев",
-            "Редактирование внутренних комментариев",
-
-            "Аналитика",
-            "Статистика"
-        ],
-
-        "Техподдержка": [
-            "Просмотр",
-
-            "Добавление внешних комментариев",
-            "Редактирование внешних комментариев",
-
-            "Просмотр столбца клиент"
-        ],
-
-        "Бухгалтер": [
-            "Просмотр",
-            "Аналитика",
-            "Статистика"
+        "Разработчик": [
+            ["Задачи", "Просмотр"],
+            ["Задачи", "Редактирование"],
+            ["Задачи", "Изменение статуса"],
+            ["Задачи", "Просмотр внутренних комментариев"],
+            ["Задачи", "Добавление внутренних комментариев"],
+            ["Задачи", "Редактирование внутренних комментариев"],
+            ["Задачи", "Аналитика"],
+            ["Задачи", "Статистика"],
+            ["Задачи", "Просмотр столбца клиент"]
         ]
     };
 
     const pattern = rolePatterns[roleName];
 
     if (!pattern) {
-        showToast("Для этой роли нет шаблона прав");
+        showToast("Для этого шаблона нет набора прав");
         return;
     }
 
@@ -847,18 +923,21 @@ function applyRolePattern(roleName) {
         return;
     }
 
-    const normalizeAction = value => String(value || "")
-        .trim()
-        .toLowerCase();
+    syncMainOrgBranchSelection(globalSelected.orgs, globalSelected.branches);
 
-    const normalizedPattern = pattern.map(normalizeAction);
-    const permissionIds = new Set();
+    const selectedPermissionIds = new Set();
 
-    dictionaries.perms.forEach(p => {
-        const action = normalizeAction(p.action);
+    dictionaries.perms.forEach(permission => {
+        if (pattern === "all") {
+            selectedPermissionIds.add(permission.id);
+            return;
+        }
 
-        if (normalizedPattern.includes(action)) {
-            permissionIds.add(p.id);
+        const module = normalize(permission.module);
+        const action = normalize(permission.action);
+
+        if (pattern.some(([moduleName, actionName]) => module === normalize(moduleName) && action === normalize(actionName))) {
+            selectedPermissionIds.add(permission.id);
         }
     });
 
@@ -871,21 +950,22 @@ function applyRolePattern(roleName) {
             return;
         }
 
-        if (permissionIds.has(pid)) {
+        if (selectedPermissionIds.has(pid)) {
             checkbox.checked = true;
-
-            if (globalSelected.orgs.length || globalSelected.branches.length) {
-                btn.dataset.orgs = JSON.stringify(globalSelected.orgs);
-                btn.dataset.branches = JSON.stringify(globalSelected.branches);
-                btn.textContent = `Орг: ${globalSelected.orgs.length} | Фил: ${globalSelected.branches.length}`;
-            }
+            btn.dataset.orgs = JSON.stringify(globalSelected.orgs);
+            btn.dataset.branches = JSON.stringify(globalSelected.branches);
+            btn.textContent = `Орг: ${globalSelected.orgs.length} | Фил: ${globalSelected.branches.length}`;
         } else {
             checkbox.checked = false;
+            btn.dataset.orgs = "[]";
+            btn.dataset.branches = "[]";
+            btn.textContent = "Орг: 0 | Фил: 0";
         }
     });
 
     showToast(`Шаблон «${roleName}» применён`);
 }
+
 function validateSelectedPermissions() {
     const checkedPermissionLines = Array.from(document.querySelectorAll(".permission-line"))
         .filter(line => line.querySelector(".perm-check")?.checked);
@@ -925,38 +1005,12 @@ async function saveUser() {
     }
 
     if (!fullName || !email || !login) {
-        showToast("Заполните ФИО, email и логин");
-        return;
-    }
-
-    if (!isValidEmail(email)) {
-        showToast("Укажите корректный email");
-        return;
-    }
-
-    if (/\s/.test(login)) {
-        showToast("Логин не должен содержать пробелы");
+        showToast("Заполните обязательные поля");
         return;
     }
 
     const orgs = Array.from(document.querySelectorAll(".org-checkbox:checked")).map(cb => parseInt(cb.value));
     const branches = Array.from(document.querySelectorAll(".branch-checkbox:checked")).map(cb => parseInt(cb.value));
-
-    if (orgs.length === 0) {
-        showToast("Выберите хотя бы одну организацию пользователя");
-        return;
-    }
-
-    const invalidBranches = branches.filter(branchId => {
-        const branchCheckbox = document.querySelector(`.branch-checkbox[value="${branchId}"]`);
-        const orgId = Number(branchCheckbox?.dataset?.org || 0);
-        return orgId > 0 && !orgs.includes(orgId);
-    });
-
-    if (invalidBranches.length > 0) {
-        showToast("Выбран филиал без соответствующей организации");
-        return;
-    }
 
     const permissionValidation = validateSelectedPermissions();
 
@@ -1020,10 +1074,7 @@ async function saveUser() {
         if (result.success) {
             closeModal();
             showToast("Пользователь сохранён");
-
-            await loadDictionaries();
-            initUserFilters();
-            await loadUsers(userCurrentPage);
+            setTimeout(() => location.reload(), 1000);
         } else {
             showToast(result.message || "Ошибка сохранения");
         }
@@ -1133,7 +1184,7 @@ async function loadOrgs(page = 1) {
                     } else {
                         showToast("У вас нет прав на удаление этой организации");
                     }
-                } else if (!e.target.closest('td:nth-child(6)')) {
+                } else if (!e.target.closest('td:nth-child(7)')) {
                     await editOrg(tr.dataset.id);
                 }
             });
@@ -1244,6 +1295,49 @@ async function editBranch(id) {
     }
 }
 
+function normalizeForCompare(value) {
+    return String(value || "").trim().toLowerCase();
+}
+
+function isDuplicateOrganizationClient(id, name, city, inn, kpp, ogrn) {
+    const source = Array.isArray(managementAllOrgs) && managementAllOrgs.length
+        ? managementAllOrgs
+        : [];
+
+    const normalizedName = normalizeForCompare(name);
+    const normalizedCity = normalizeForCompare(city);
+    const normalizedInn = normalizeForCompare(inn);
+    const normalizedKpp = normalizeForCompare(kpp);
+    const normalizedOgrn = normalizeForCompare(ogrn);
+
+    return source.some(org => {
+        if (Number(org.id) === Number(id)) return false;
+
+        const sameNameCity = normalizeForCompare(org.name) === normalizedName
+            && normalizeForCompare(org.city) === normalizedCity;
+
+        const sameInnKpp = normalizedInn && normalizedKpp
+            && normalizeForCompare(org.inn) === normalizedInn
+            && normalizeForCompare(org.kpp) === normalizedKpp;
+
+        const sameOgrn = normalizedOgrn && normalizeForCompare(org.ogrn) === normalizedOgrn;
+
+        return sameNameCity || sameInnKpp || sameOgrn;
+    });
+}
+
+function isDuplicateBranchClient(id, address, organizationId) {
+    const source = Array.isArray(managementAllBranches) && managementAllBranches.length
+        ? managementAllBranches
+        : [];
+
+    const normalizedAddress = normalizeForCompare(address);
+
+    return source.some(branch => Number(branch.id) !== Number(id)
+        && Number(branch.organizationId) === Number(organizationId)
+        && normalizeForCompare(branch.address) === normalizedAddress);
+}
+
 async function saveOrg() {
     const name = document.getElementById("orgName").value.trim();
     const city = document.getElementById("orgCity").value.trim();
@@ -1286,6 +1380,11 @@ async function saveOrg() {
     const productIds = Array.from(document.querySelectorAll('.org-product-checkbox:checked'))
         .map(cb => parseInt(cb.value));
 
+    if (isDuplicateOrganizationClient(currentOrgId, name, city, inn, kpp, ogrn)) {
+        showToast("Такая организация уже существует");
+        return;
+    }
+
     const payload = {
         id: currentOrgId,
         name,
@@ -1294,7 +1393,7 @@ async function saveOrg() {
         kpp,
         ogrn,
         workHoursLimit,
-        productIds: productIds
+        productIds
     };
 
     const token = document.querySelector('#antiForgeryForm input[name="__RequestVerificationToken"]')?.value || "";
@@ -1312,8 +1411,10 @@ async function saveOrg() {
         const result = await res.json();
         if (result.success) {
             closeOrgModal();
-            await loadOrgs();
             await loadDictionaries();
+            initUserFilters();
+            await loadOrgs(orgCurrentPage);
+            await loadBranches(branchCurrentPage);
             showToast("Организация сохранена");
         } else {
             showToast(result.message || "Ошибка сохранения");
@@ -1902,13 +2003,13 @@ async function saveBranch() {
         return;
     }
 
-    if (address.length < 5) {
-        showToast("Адрес филиала должен быть подробнее");
+    if (!orgId) {
+        showToast("Выберите организацию");
         return;
     }
 
-    if (!orgId) {
-        showToast("Выберите организацию");
+    if (isDuplicateBranchClient(currentBranchId, address, orgId)) {
+        showToast("Такой филиал уже существует в выбранной организации");
         return;
     }
 
@@ -1933,7 +2034,9 @@ async function saveBranch() {
         const result = await res.json();
         if (result.success) {
             closeBranchModal();
-            await loadBranches();
+            await loadDictionaries();
+            initUserFilters();
+            await loadBranches(branchCurrentPage);
             showToast("Филиал сохранён");
         } else {
             showToast(result.message || "Ошибка сохранения");
@@ -2088,10 +2191,6 @@ function sortTable(btn, selector, colIndex, type) {
 
         btn.textContent = "Сортировать A–Я";
     }
-}
-
-function isValidEmail(value) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
 }
 
 function generatePassword(length = 10) {
@@ -2346,7 +2445,7 @@ function renderOrgsPage() {
                 } else {
                     showToast("У вас нет прав на удаление этой организации");
                 }
-            } else if (!event.target.closest("td:nth-child(6)")) {
+            } else if (!event.target.closest("td:nth-child(7)")) {
                 await editOrg(tr.dataset.id);
             }
         });

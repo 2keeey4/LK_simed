@@ -6,7 +6,7 @@
     Layout = "_DashboardLayout";
 }
 
-<link rel="stylesheet" href="~/css/users.css" />
+<link rel="stylesheet" href="~/css/users.css" asp-append-version="true" />
 
 <script>
     window.currentUserId = @Model.CurrentUserId;
@@ -17,8 +17,8 @@
 <div class="admin-container">
 
     <form class="autofill-decoy" autocomplete="off" aria-hidden="true">
-        <input type="text" name="username" autocomplete="username" tabindex="-1" />
-        <input type="password" name="password" autocomplete="current-password" tabindex="-1" />
+        <input type="text" name="fake_user_login_field" autocomplete="off" tabindex="-1" />
+        <input type="password" name="fake_user_password_field" autocomplete="new-password" tabindex="-1" />
     </form>
 
     <div class="main-tabs">
@@ -32,8 +32,8 @@
             <div class="filter-group">
                 <input type="search"
                        id="searchUser"
-                       name="q_user_filter_no_login"
-                       autocomplete="new-password"
+                       name="users_search_filter_not_login"
+                       autocomplete="off"
                        autocapitalize="off"
                        spellcheck="false"
                        inputmode="search"
@@ -95,35 +95,12 @@
             <tbody>
                 @foreach (var user in Model.Users)
                 {
-                    var organizations = user.Organizations ?? new List<string>();
-                    var branches = user.Branches ?? new List<string>();
-                    var organizationsTitle = string.Join(", ", organizations);
-                    var branchesTitle = string.Join(", ", branches);
-                    var organizationsShort = string.Join(", ", organizations.Take(2));
-                    var branchesShort = string.Join(", ", branches.Take(2));
-
                     <tr data-user-id="@user.Id">
                         <td>@user.FullName</td>
                         <td>@user.Login</td>
                         <td>@user.Email</td>
-                        <td class="list-cell">
-                            <span class="compact-list" title="@organizationsTitle">
-                                @(string.IsNullOrWhiteSpace(organizationsShort) ? "—" : organizationsShort)
-                                @if (organizations.Count > 2)
-                                {
-                                    <span class="compact-list-more">+@(organizations.Count - 2)</span>
-                                }
-                            </span>
-                        </td>
-                        <td class="list-cell">
-                            <span class="compact-list" title="@branchesTitle">
-                                @(string.IsNullOrWhiteSpace(branchesShort) ? "—" : branchesShort)
-                                @if (branches.Count > 2)
-                                {
-                                    <span class="compact-list-more">+@(branches.Count - 2)</span>
-                                }
-                            </span>
-                        </td>
+                        <td>@string.Join(", ", user.Organizations)</td>
+                        <td>@string.Join(", ", user.Branches)</td>
                         <td>
                             <button class="btn small danger delete-user" type="button">
                                 Удалить
@@ -140,12 +117,17 @@
     <div id="tab-orgs" class="tab-section">
         <div class="section-header">
             <div class="filter-group">
-                <input type="text"
+                <input type="search"
                        id="searchOrg"
-                       name="org_search_filter"
+                       name="orgs_search_filter_not_login"
                        autocomplete="off"
                        autocapitalize="off"
                        spellcheck="false"
+                       inputmode="search"
+                       readonly
+                       data-lpignore="true"
+                       data-1p-ignore="true"
+                       data-form-type="other"
                        placeholder="Поиск по названию..."
                        class="search-input" />
 
@@ -198,12 +180,17 @@
                     </div>
                 </div>
 
-                <input type="text"
+                <input type="search"
                        id="searchBranch"
-                       name="branch_search_filter"
+                       name="branches_search_filter_not_login"
                        autocomplete="off"
                        autocapitalize="off"
                        spellcheck="false"
+                       inputmode="search"
+                       readonly
+                       data-lpignore="true"
+                       data-1p-ignore="true"
+                       data-form-type="other"
                        placeholder="Поиск по названию филиала..."
                        class="search-input" />
 
@@ -244,11 +231,6 @@
             <h3 id="modalTitle">Редактирование пользователя</h3>
         </div>
 
-        <div class="autofill-guard" aria-hidden="true">
-            <input type="text" name="fake_login" autocomplete="username" tabindex="-1" />
-            <input type="password" name="fake_password" autocomplete="current-password" tabindex="-1" />
-        </div>
-
         <div class="modal-tabs">
             <button class="tab-button active" data-tab="tab-general" type="button">
                 Основное
@@ -287,8 +269,10 @@
                             ФИО
                             <input type="text"
                                    id="fullName"
-                                   name="user_full_name"
-                                   autocomplete="name"
+                                   name="admin_user_full_name_field"
+                                   autocomplete="off"
+                                   data-lpignore="true"
+                                   data-1p-ignore="true"
                                    placeholder="Введите ФИО" />
                         </label>
 
@@ -296,8 +280,10 @@
                             Email
                             <input type="email"
                                    id="email"
-                                   name="user_email"
-                                   autocomplete="email"
+                                   name="admin_user_email_field"
+                                   autocomplete="off"
+                                   data-lpignore="true"
+                                   data-1p-ignore="true"
                                    placeholder="Введите email" />
                         </label>
                     </div>
@@ -307,8 +293,10 @@
                             Логин
                             <input type="text"
                                    id="login"
-                                   name="user_login"
-                                   autocomplete="username"
+                                   name="admin_user_login_field"
+                                   autocomplete="off"
+                                   data-lpignore="true"
+                                   data-1p-ignore="true"
                                    placeholder="Введите логин" />
                         </label>
 
@@ -317,8 +305,11 @@
                             <div class="password-wrapper">
                                 <input type="password"
                                        id="password"
-                                       name="new_user_password"
+                                       name="admin_user_new_password_field"
                                        autocomplete="new-password"
+                                       data-lpignore="true"
+                                       data-1p-ignore="true"
+                                       data-form-type="other"
                                        placeholder="Оставьте пустым" />
 
                                 <button type="button"
@@ -368,12 +359,10 @@
             <div class="permissions-header">
                 <div class="pattern-buttons">
                     <button class="btn small secondary pattern-btn" type="button">Администратор</button>
-                    <button class="btn small secondary pattern-btn" type="button">Директор</button>
-                    <button class="btn small secondary pattern-btn" type="button">Врач</button>
-                    <button class="btn small secondary pattern-btn" type="button">Менеджер</button>
-                    <button class="btn small secondary pattern-btn" type="button">Программист</button>
-                    <button class="btn small secondary pattern-btn" type="button">Техподдержка</button>
-                    <button class="btn small secondary pattern-btn" type="button">Бухгалтер</button>
+                    <button class="btn small secondary pattern-btn" type="button">Руководитель</button>
+                    <button class="btn small secondary pattern-btn" type="button">Клиент</button>
+                    <button class="btn small secondary pattern-btn" type="button">Специалист поддержки</button>
+                    <button class="btn small secondary pattern-btn" type="button">Разработчик</button>
                 </div>
 
                 <div class="apply-all">
@@ -419,33 +408,35 @@
         <div class="form-group">
             <label>
                 Название
-                <input type="text" id="orgName" autocomplete="off" />
+                <input type="text" id="orgName" name="org_name_field" autocomplete="off" data-lpignore="true" data-1p-ignore="true" />
             </label>
 
             <label>
                 Город
-                <input type="text" id="orgCity" autocomplete="off" />
+                <input type="text" id="orgCity" name="org_city_field" autocomplete="off" data-lpignore="true" data-1p-ignore="true" />
             </label>
 
             <label>
                 ИНН
-                <input type="text" id="orgInn" autocomplete="off" />
+                <input type="text" id="orgInn" name="org_inn_field" autocomplete="off" data-lpignore="true" data-1p-ignore="true" />
             </label>
 
             <label>
                 КПП
-                <input type="text" id="orgKpp" autocomplete="off" />
+                <input type="text" id="orgKpp" name="org_kpp_field" autocomplete="off" data-lpignore="true" data-1p-ignore="true" />
             </label>
 
             <label>
                 ОГРН
-                <input type="text" id="orgOgrn" autocomplete="off" />
+                <input type="text" id="orgOgrn" name="org_ogrn_field" autocomplete="off" data-lpignore="true" data-1p-ignore="true" />
             </label>
 
             <label>
                 Лимит часов по договору
                 <input type="number"
                        id="orgWorkHoursLimit"
+                       name="org_work_hours_limit_field"
+                       autocomplete="off"
                        step="0.5"
                        min="0"
                        value="0" />
@@ -486,7 +477,10 @@
                 Адрес филиала
                 <input type="text"
                        id="branchAddress"
+                       name="branch_address_field"
                        autocomplete="off"
+                       data-lpignore="true"
+                       data-1p-ignore="true"
                        placeholder="Введите адрес филиала" />
             </label>
 

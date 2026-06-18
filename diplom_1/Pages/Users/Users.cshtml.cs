@@ -9,8 +9,6 @@ using Microsoft.Extensions.Options;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
-using System;
-using System.Threading;
 
 namespace diplom_1.Pages.Users
 {
@@ -141,7 +139,7 @@ namespace diplom_1.Pages.Users
             {
                 User user;
                 bool isNew = data.Id == 0;
-                string? generatedPassword = null;
+                string? plainPasswordForEmail = null;
 
                 var currentUserId = HttpContext.Session.GetInt32("UserId");
                 var isCurrentUserSuperAdmin = HttpContext.Session.GetInt32("IsSuperAdmin") == 1;
@@ -151,30 +149,6 @@ namespace diplom_1.Pages.Users
                     .Where(x => !string.IsNullOrEmpty(x))
                     .Select(int.Parse)
                     .ToList() ?? new List<int>();
-
-                data.FullName = data.FullName?.Trim() ?? "";
-                data.Email = data.Email?.Trim() ?? "";
-                data.Login = data.Login?.Trim() ?? "";
-                data.Organizations ??= new List<int>();
-                data.Branches ??= new List<int>();
-                data.Permissions ??= new List<PermissionDto>();
-
-                var userDataValidation = await ValidateUserSaveDataAsync(
-                    data,
-                    isNew,
-                    currentUserId,
-                    isCurrentUserSuperAdmin,
-                    currentUserOrgs
-                );
-
-                if (!userDataValidation.Success)
-                {
-                    return new JsonResult(new
-                    {
-                        success = false,
-                        message = userDataValidation.Message
-                    });
-                }
 
                 var permissionsValidation = ValidateUserPermissions(data.Permissions);
 
@@ -239,14 +213,16 @@ namespace diplom_1.Pages.Users
                         });
                     }
 
-                    generatedPassword = GeneratePassword();
+                    plainPasswordForEmail = string.IsNullOrWhiteSpace(data.Password)
+                        ? GeneratePassword()
+                        : data.Password.Trim();
 
                     user = new User
                     {
                         FullName = data.FullName,
                         Email = data.Email,
                         Login = data.Login,
-                        Password = HashPassword(string.IsNullOrEmpty(data.Password) ? generatedPassword : data.Password),
+                        Password = HashPassword(plainPasswordForEmail),
                         PhotoPath = string.IsNullOrWhiteSpace(data.PhotoPath) ? "~/icons/default-avatar.png" : data.PhotoPath,
                         IsSuperAdmin = isCurrentUserSuperAdmin && data.IsSuperAdmin
                     };
@@ -288,7 +264,8 @@ namespace diplom_1.Pages.Users
 
                     if (!string.IsNullOrWhiteSpace(data.Password))
                     {
-                        user.Password = HashPassword(data.Password);
+                        plainPasswordForEmail = data.Password.Trim();
+                        user.Password = HashPassword(plainPasswordForEmail);
                     }
 
                     if (!string.IsNullOrWhiteSpace(data.PhotoPath))
@@ -408,14 +385,9 @@ namespace diplom_1.Pages.Users
 
                 await _context.SaveChangesAsync();
 
-                if (data.SendEmail)
+                if (data.SendEmail && !string.IsNullOrWhiteSpace(plainPasswordForEmail))
                 {
-                    string? passwordToSend = isNew ? (generatedPassword ?? data.Password) : data.Password;
-
-                    if (!string.IsNullOrEmpty(passwordToSend))
-                    {
-                        await SendCredentialsEmail(user.Email, user.Login, passwordToSend);
-                    }
+                    await SendCredentialsEmail(user.Email, user.Login, plainPasswordForEmail);
                 }
 
                 if (currentUserId != null && currentUserId == user.Id)
@@ -636,29 +608,44 @@ namespace diplom_1.Pages.Users
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> OnPostSaveOrgAsync([FromBody] OrgDto dto)
         {
-            if (dto == null)
+            if (dto == null || string.IsNullOrWhiteSpace(dto.Name))
             {
                 return new JsonResult(new
                 {
                     success = false,
-                    message = "Нет данных организации"
+                    message = "Название организации обязательно"
                 });
             }
 
-            dto.Name = dto.Name?.Trim() ?? "";
-            dto.City = dto.City?.Trim() ?? "";
-            dto.Inn = dto.Inn?.Trim() ?? "";
-            dto.Kpp = dto.Kpp?.Trim() ?? "";
-            dto.Ogrn = dto.Ogrn?.Trim() ?? "";
+            dto.Name = dto.Name.Trim();
+            dto.City = dto.City?.Trim();
+            dto.Inn = dto.Inn?.Trim();
+            dto.Kpp = dto.Kpp?.Trim();
+            dto.Ogrn = dto.Ogrn?.Trim();
 
-            var orgValidation = ValidateOrganizationDto(dto);
-            if (!orgValidation.Success)
+            if (string.IsNullOrWhiteSpace(dto.City))
             {
-                return new JsonResult(new
-                {
-                    success = false,
-                    message = orgValidation.Message
-                });
+                return new JsonResult(new { success = false, message = "Город организации обязателен" });
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Inn) || !dto.Inn.All(char.IsDigit))
+            {
+                return new JsonResult(new { success = false, message = "Укажите корректный ИНН" });
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Kpp) || !dto.Kpp.All(char.IsDigit))
+            {
+                return new JsonResult(new { success = false, message = "Укажите корректный КПП" });
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Ogrn) || !dto.Ogrn.All(char.IsDigit))
+            {
+                return new JsonResult(new { success = false, message = "Укажите корректный ОГРН" });
+            }
+
+            if (dto.WorkHoursLimit < 0)
+            {
+                return new JsonResult(new { success = false, message = "Лимит часов не может быть отрицательным" });
             }
 
             var isSuperAdmin = HttpContext.Session.GetInt32("IsSuperAdmin") == 1;
@@ -679,6 +666,16 @@ namespace diplom_1.Pages.Users
                         message = "У вас нет прав на редактирование этой организации"
                     });
                 }
+            }
+
+            var duplicateOrgValidation = await ValidateOrganizationDuplicateAsync(dto);
+            if (!duplicateOrgValidation.Success)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = duplicateOrgValidation.Message
+                });
             }
 
             try
@@ -814,50 +811,24 @@ namespace diplom_1.Pages.Users
 
             var branchIds = org.Branches.Select(b => b.Id).ToList();
 
-            var relatedRequests = await _context.Requests
-                .Where(r =>
-                    r.OrganizationId == id ||
-                    (r.BranchId != null && branchIds.Contains(r.BranchId.Value)))
-                .ToListAsync();
-
-            foreach (var request in relatedRequests)
-            {
-                if (request.OrganizationId == id)
-                {
-                    request.OrganizationId = null;
-                }
-
-                if (request.BranchId != null && branchIds.Contains(request.BranchId.Value))
-                {
-                    request.BranchId = null;
-                }
-            }
-
-            var userPermissions = await _context.UserPermissions
-                .Where(up =>
-                    up.OrganizationId == id ||
-                    (up.BranchId != null && branchIds.Contains(up.BranchId.Value)))
-                .ToListAsync();
+            var userPermissions = _context.UserPermissions
+                .Where(up => up.OrganizationId == id || (up.BranchId.HasValue && branchIds.Contains(up.BranchId.Value)));
             _context.UserPermissions.RemoveRange(userPermissions);
 
-            var userBranches = await _context.UserBranches
-                .Where(ub => branchIds.Contains(ub.BranchId))
-                .ToListAsync();
+            var userBranches = _context.UserBranches
+                .Where(ub => branchIds.Contains(ub.BranchId));
             _context.UserBranches.RemoveRange(userBranches);
 
-            var userOrganizations = await _context.UserOrganizations
-                .Where(uo => uo.OrganizationId == id)
-                .ToListAsync();
+            var userOrganizations = _context.UserOrganizations
+                .Where(uo => uo.OrganizationId == id);
             _context.UserOrganizations.RemoveRange(userOrganizations);
 
-            var organizationProducts = await _context.OrganizationProducts
-                .Where(op => op.OrganizationId == id)
-                .ToListAsync();
+            var organizationProducts = _context.OrganizationProducts
+                .Where(op => op.OrganizationId == id);
             _context.OrganizationProducts.RemoveRange(organizationProducts);
 
             _context.Branches.RemoveRange(org.Branches);
             _context.Organizations.Remove(org);
-
             await _context.SaveChangesAsync();
 
             return new JsonResult(new
@@ -930,18 +901,7 @@ namespace diplom_1.Pages.Users
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> OnPostSaveBranchAsync([FromBody] BranchDto dto)
         {
-            if (dto == null)
-            {
-                return new JsonResult(new
-                {
-                    success = false,
-                    message = "Нет данных филиала"
-                });
-            }
-
-            dto.Address = dto.Address?.Trim() ?? "";
-
-            if (string.IsNullOrWhiteSpace(dto.Address))
+            if (dto == null || string.IsNullOrWhiteSpace(dto.Address))
             {
                 return new JsonResult(new
                 {
@@ -949,6 +909,8 @@ namespace diplom_1.Pages.Users
                     message = "Адрес филиала обязателен"
                 });
             }
+
+            dto.Address = dto.Address.Trim();
 
             if (dto.Address.Length < 5)
             {
@@ -959,12 +921,22 @@ namespace diplom_1.Pages.Users
                 });
             }
 
-            if (dto.OrganizationId <= 0 || !await _context.Organizations.AnyAsync(o => o.Id == dto.OrganizationId))
+            if (dto.OrganizationId <= 0)
             {
                 return new JsonResult(new
                 {
                     success = false,
-                    message = "Выберите существующую организацию"
+                    message = "Выберите организацию"
+                });
+            }
+
+            var organizationExists = await _context.Organizations.AnyAsync(o => o.Id == dto.OrganizationId);
+            if (!organizationExists)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Организация не найдена"
                 });
             }
 
@@ -982,6 +954,16 @@ namespace diplom_1.Pages.Users
                 {
                     success = false,
                     message = "У вас нет прав на создание филиала в этой организации"
+                });
+            }
+
+            var duplicateBranchValidation = await ValidateBranchDuplicateAsync(dto);
+            if (!duplicateBranchValidation.Success)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = duplicateBranchValidation.Message
                 });
             }
 
@@ -1073,23 +1055,12 @@ namespace diplom_1.Pages.Users
                 });
             }
 
-            var relatedRequests = await _context.Requests
-                .Where(r => r.BranchId == id)
-                .ToListAsync();
-
-            foreach (var request in relatedRequests)
-            {
-                request.BranchId = null;
-            }
-
-            var userPermissions = await _context.UserPermissions
-                .Where(up => up.BranchId == id)
-                .ToListAsync();
+            var userPermissions = _context.UserPermissions
+                .Where(up => up.BranchId == id);
             _context.UserPermissions.RemoveRange(userPermissions);
 
-            var userBranches = await _context.UserBranches
-                .Where(ub => ub.BranchId == id)
-                .ToListAsync();
+            var userBranches = _context.UserBranches
+                .Where(ub => ub.BranchId == id);
             _context.UserBranches.RemoveRange(userBranches);
 
             _context.Branches.Remove(branch);
@@ -1143,7 +1114,7 @@ namespace diplom_1.Pages.Users
                     {
                         id = p.Id,
                         module = p.Module.Trim(),
-                        action = p.Action.Trim()
+                        action = string.IsNullOrWhiteSpace(p.Action) ? (p.Description ?? "").Trim() : p.Action.Trim()
                     })
                     .OrderBy(p => p.module)
                     .ThenBy(p => p.action)
@@ -1163,7 +1134,7 @@ namespace diplom_1.Pages.Users
                     {
                         id = p.Id,
                         module = p.Module.Trim(),
-                        action = p.Action.Trim()
+                        action = string.IsNullOrWhiteSpace(p.Action) ? (p.Description ?? "").Trim() : p.Action.Trim()
                     })
                     .OrderBy(p => p.module)
                     .ThenBy(p => p.action)
@@ -1254,212 +1225,6 @@ namespace diplom_1.Pages.Users
             }
         }
 
-        private static ValidationResult ValidateOrganizationDto(OrgDto dto)
-        {
-            if (string.IsNullOrWhiteSpace(dto.Name))
-            {
-                return ValidationResult.Fail("Укажите название организации");
-            }
-
-            if (string.IsNullOrWhiteSpace(dto.City))
-            {
-                return ValidationResult.Fail("Укажите город организации");
-            }
-
-            if (string.IsNullOrWhiteSpace(dto.Inn))
-            {
-                return ValidationResult.Fail("Укажите ИНН организации");
-            }
-
-            if (dto.Inn.Any(ch => !char.IsDigit(ch)))
-            {
-                return ValidationResult.Fail("ИНН должен содержать только цифры");
-            }
-
-            if (string.IsNullOrWhiteSpace(dto.Kpp))
-            {
-                return ValidationResult.Fail("Укажите КПП организации");
-            }
-
-            if (dto.Kpp.Any(ch => !char.IsDigit(ch)))
-            {
-                return ValidationResult.Fail("КПП должен содержать только цифры");
-            }
-
-            if (string.IsNullOrWhiteSpace(dto.Ogrn))
-            {
-                return ValidationResult.Fail("Укажите ОГРН организации");
-            }
-
-            if (dto.Ogrn.Any(ch => !char.IsDigit(ch)))
-            {
-                return ValidationResult.Fail("ОГРН должен содержать только цифры");
-            }
-
-            if (dto.WorkHoursLimit < 0)
-            {
-                return ValidationResult.Fail("Лимит часов не может быть отрицательным");
-            }
-
-            return ValidationResult.Ok();
-        }
-
-        private async Task<ValidationResult> ValidateUserSaveDataAsync(
-            UserSaveDto data,
-            bool isNew,
-            int? currentUserId,
-            bool isCurrentUserSuperAdmin,
-            List<int> currentUserOrgs)
-        {
-            if (string.IsNullOrWhiteSpace(data.FullName))
-            {
-                return ValidationResult.Fail("Укажите ФИО пользователя");
-            }
-
-            if (string.IsNullOrWhiteSpace(data.Email))
-            {
-                return ValidationResult.Fail("Укажите email пользователя");
-            }
-
-            try
-            {
-                _ = new System.Net.Mail.MailAddress(data.Email);
-            }
-            catch
-            {
-                return ValidationResult.Fail("Укажите корректный email пользователя");
-            }
-
-            if (string.IsNullOrWhiteSpace(data.Login))
-            {
-                return ValidationResult.Fail("Укажите логин пользователя");
-            }
-
-            if (data.Login.Any(char.IsWhiteSpace))
-            {
-                return ValidationResult.Fail("Логин не должен содержать пробелы");
-            }
-
-            var normalizedOrgIds = data.Organizations
-                .Where(id => id > 0)
-                .Distinct()
-                .ToList();
-
-            var normalizedBranchIds = data.Branches
-                .Where(id => id > 0)
-                .Distinct()
-                .ToList();
-
-            data.Organizations = normalizedOrgIds;
-            data.Branches = normalizedBranchIds;
-
-            if (!normalizedOrgIds.Any())
-            {
-                return ValidationResult.Fail("Выберите хотя бы одну организацию пользователя");
-            }
-
-            if (!isCurrentUserSuperAdmin && normalizedOrgIds.Any(orgId => !currentUserOrgs.Contains(orgId)))
-            {
-                return ValidationResult.Fail("Вы не можете назначить пользователю недоступную организацию");
-            }
-
-            var userId = isNew ? 0 : data.Id;
-
-            var loginExists = await _context.Users
-                .AnyAsync(u => u.Id != userId && u.Login == data.Login);
-
-            if (loginExists)
-            {
-                return ValidationResult.Fail("Пользователь с таким логином уже существует");
-            }
-
-            var emailExists = await _context.Users
-                .AnyAsync(u => u.Id != userId && u.Email == data.Email);
-
-            if (emailExists)
-            {
-                return ValidationResult.Fail("Пользователь с таким email уже существует");
-            }
-
-            var existingOrgIds = await _context.Organizations
-                .Where(o => normalizedOrgIds.Contains(o.Id))
-                .Select(o => o.Id)
-                .ToListAsync();
-
-            if (existingOrgIds.Count != normalizedOrgIds.Count)
-            {
-                return ValidationResult.Fail("Выбрана несуществующая организация");
-            }
-
-            if (normalizedBranchIds.Any())
-            {
-                var branches = await _context.Branches
-                    .Where(b => normalizedBranchIds.Contains(b.Id))
-                    .Select(b => new { b.Id, b.OrganizationId })
-                    .ToListAsync();
-
-                if (branches.Count != normalizedBranchIds.Count)
-                {
-                    return ValidationResult.Fail("Выбран несуществующий филиал");
-                }
-
-                if (branches.Any(b => !normalizedOrgIds.Contains(b.OrganizationId)))
-                {
-                    return ValidationResult.Fail("Выбранный филиал не относится к выбранной организации пользователя");
-                }
-
-                if (!isCurrentUserSuperAdmin && branches.Any(b => !currentUserOrgs.Contains(b.OrganizationId)))
-                {
-                    return ValidationResult.Fail("Вы не можете назначить пользователю филиал недоступной организации");
-                }
-            }
-
-            var permissionIds = data.Permissions
-                .Select(p => p.PermissionId)
-                .Where(id => id > 0)
-                .Distinct()
-                .ToList();
-
-            if (permissionIds.Any())
-            {
-                var existingPermissionCount = await _context.Permissions
-                    .CountAsync(p => permissionIds.Contains(p.Id));
-
-                if (existingPermissionCount != permissionIds.Count)
-                {
-                    return ValidationResult.Fail("Выбрано несуществующее право доступа");
-                }
-            }
-
-            foreach (var permission in data.Permissions)
-            {
-                var permissionOrgIds = permission.OrganizationIds?
-                    .Where(id => id > 0)
-                    .Distinct()
-                    .ToList() ?? new List<int>();
-
-                var permissionBranchIds = permission.BranchIds?
-                    .Where(id => id > 0)
-                    .Distinct()
-                    .ToList() ?? new List<int>();
-
-                permission.OrganizationIds = permissionOrgIds;
-                permission.BranchIds = permissionBranchIds;
-
-                if (permissionOrgIds.Any(orgId => !normalizedOrgIds.Contains(orgId)))
-                {
-                    return ValidationResult.Fail("Права можно назначать только в рамках организаций пользователя");
-                }
-
-                if (permissionBranchIds.Any(branchId => !normalizedBranchIds.Contains(branchId)))
-                {
-                    return ValidationResult.Fail("Права можно назначать только в рамках филиалов пользователя");
-                }
-            }
-
-            return ValidationResult.Ok();
-        }
-
         private static ValidationResult ValidateUserPermissions(List<PermissionDto>? permissions)
         {
             if (permissions == null || !permissions.Any())
@@ -1517,16 +1282,12 @@ namespace diplom_1.Pages.Users
             try
             {
                 _logger.LogInformation("=== НАЧАЛО ОТПРАВКИ EMAIL ===");
-                _logger.LogInformation("Email получателя: {Email}", email);
-                _logger.LogInformation("Логин: {Login}", login);
+                _logger.LogInformation($"Email получателя: {email}");
+                _logger.LogInformation($"Логин: {login}");
 
                 var smtpSettings = _smtpSettings.Value;
 
-                _logger.LogInformation(
-                    "SMTP Host: {Host}, Port: {Port}",
-                    smtpSettings.Host,
-                    smtpSettings.Port
-                );
+                _logger.LogInformation($"SMTP Host: {smtpSettings.Host}, Port: {smtpSettings.Port}");
 
                 var message = new MimeMessage();
 
@@ -1553,45 +1314,26 @@ namespace diplom_1.Pages.Users
                 message.Body = bodyBuilder.ToMessageBody();
 
                 using var client = new SmtpClient();
-                using var smtpTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
 
-                client.Timeout = 8000;
                 client.ServerCertificateValidationCallback = (s, c, h, e) => true;
 
                 await client.ConnectAsync(
                     smtpSettings.Host,
                     smtpSettings.Port,
-                    SecureSocketOptions.SslOnConnect,
-                    smtpTimeout.Token
+                    SecureSocketOptions.SslOnConnect
                 );
 
-                await client.AuthenticateAsync(
-                    smtpSettings.Username,
-                    smtpSettings.Password,
-                    smtpTimeout.Token
-                );
-
-                await client.SendAsync(message, smtpTimeout.Token);
-                await client.DisconnectAsync(true, smtpTimeout.Token);
+                await client.AuthenticateAsync(smtpSettings.Username, smtpSettings.Password);
+                await client.SendAsync(message);
+                await client.DisconnectAsync(true);
 
                 _logger.LogInformation("=== ПИСЬМО УСПЕШНО ОТПРАВЛЕНО ===");
             }
-            catch (OperationCanceledException ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Отправка письма с данными входа прервана по лимиту 8 секунд. Пользователь сохранён без ожидания письма."
-                );
-            }
             catch (Exception ex)
             {
-                _logger.LogError(
-                    ex,
-                    "Ошибка отправки письма с данными входа. Пользователь сохранён."
-                );
+                _logger.LogError(ex, $"Ошибка отправки email: {ex.Message}");
             }
         }
-
 
         private class ValidationResult
         {
@@ -1614,6 +1356,77 @@ namespace diplom_1.Pages.Users
                     Message = message
                 };
             }
+        }
+
+        private static string NormalizeForCompare(string? value)
+        {
+            return (value ?? string.Empty).Trim().ToLowerInvariant();
+        }
+
+        private async Task<ValidationResult> ValidateOrganizationDuplicateAsync(OrgDto dto)
+        {
+            var name = NormalizeForCompare(dto.Name);
+            var city = NormalizeForCompare(dto.City);
+            var inn = NormalizeForCompare(dto.Inn);
+            var kpp = NormalizeForCompare(dto.Kpp);
+            var ogrn = NormalizeForCompare(dto.Ogrn);
+
+            var organizations = await _context.Organizations
+                .AsNoTracking()
+                .Where(o => o.Id != dto.Id)
+                .Select(o => new
+                {
+                    o.Name,
+                    o.City,
+                    o.INN,
+                    o.KPP,
+                    o.OGRN
+                })
+                .ToListAsync();
+
+            var duplicate = organizations.Any(o =>
+            {
+                var sameNameAndCity = !string.IsNullOrEmpty(name)
+                    && NormalizeForCompare(o.Name) == name
+                    && NormalizeForCompare(o.City) == city;
+
+                var sameInnKpp = !string.IsNullOrEmpty(inn)
+                    && !string.IsNullOrEmpty(kpp)
+                    && NormalizeForCompare(o.INN) == inn
+                    && NormalizeForCompare(o.KPP) == kpp;
+
+                var sameOgrn = !string.IsNullOrEmpty(ogrn)
+                    && NormalizeForCompare(o.OGRN) == ogrn;
+
+                return sameNameAndCity || sameInnKpp || sameOgrn;
+            });
+
+            if (duplicate)
+            {
+                return ValidationResult.Fail("Такая организация уже существует");
+            }
+
+            return ValidationResult.Ok();
+        }
+
+        private async Task<ValidationResult> ValidateBranchDuplicateAsync(BranchDto dto)
+        {
+            var address = NormalizeForCompare(dto.Address);
+
+            var branches = await _context.Branches
+                .AsNoTracking()
+                .Where(b => b.Id != dto.Id && b.OrganizationId == dto.OrganizationId)
+                .Select(b => b.Address)
+                .ToListAsync();
+
+            var exists = branches.Any(existingAddress => NormalizeForCompare(existingAddress) == address);
+
+            if (exists)
+            {
+                return ValidationResult.Fail("Такой филиал уже существует в выбранной организации");
+            }
+
+            return ValidationResult.Ok();
         }
 
         public class UserDisplayDto
