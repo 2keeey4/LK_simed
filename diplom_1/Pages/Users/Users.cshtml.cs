@@ -612,6 +612,7 @@ namespace diplom_1.Pages.Users
                 {
                     id = o.Id,
                     name = o.Name,
+                    city = o.City,
                     inn = o.INN,
                     kpp = o.KPP,
                     ogrn = o.OGRN,
@@ -635,12 +636,28 @@ namespace diplom_1.Pages.Users
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> OnPostSaveOrgAsync([FromBody] OrgDto dto)
         {
-            if (dto == null || string.IsNullOrWhiteSpace(dto.Name))
+            if (dto == null)
             {
                 return new JsonResult(new
                 {
                     success = false,
-                    message = "Название организации обязательно"
+                    message = "Нет данных организации"
+                });
+            }
+
+            dto.Name = dto.Name?.Trim() ?? "";
+            dto.City = dto.City?.Trim() ?? "";
+            dto.Inn = dto.Inn?.Trim() ?? "";
+            dto.Kpp = dto.Kpp?.Trim() ?? "";
+            dto.Ogrn = dto.Ogrn?.Trim() ?? "";
+
+            var orgValidation = ValidateOrganizationDto(dto);
+            if (!orgValidation.Success)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = orgValidation.Message
                 });
             }
 
@@ -682,6 +699,7 @@ namespace diplom_1.Pages.Users
                     org = new Organization
                     {
                         Name = dto.Name,
+                        City = dto.City ?? "",
                         INN = dto.Inn ?? "",
                         KPP = dto.Kpp ?? "",
                         OGRN = dto.Ogrn ?? "",
@@ -719,6 +737,7 @@ namespace diplom_1.Pages.Users
                     }
 
                     org.Name = dto.Name;
+                    org.City = dto.City ?? "";
                     org.INN = dto.Inn ?? "";
                     org.KPP = dto.Kpp ?? "";
                     org.OGRN = dto.Ogrn ?? "";
@@ -793,16 +812,52 @@ namespace diplom_1.Pages.Users
                 });
             }
 
-            if (org.Branches.Any())
+            var branchIds = org.Branches.Select(b => b.Id).ToList();
+
+            var relatedRequests = await _context.Requests
+                .Where(r =>
+                    r.OrganizationId == id ||
+                    (r.BranchId != null && branchIds.Contains(r.BranchId.Value)))
+                .ToListAsync();
+
+            foreach (var request in relatedRequests)
             {
-                return new JsonResult(new
+                if (request.OrganizationId == id)
                 {
-                    success = false,
-                    message = "Сначала удалите филиалы"
-                });
+                    request.OrganizationId = null;
+                }
+
+                if (request.BranchId != null && branchIds.Contains(request.BranchId.Value))
+                {
+                    request.BranchId = null;
+                }
             }
 
+            var userPermissions = await _context.UserPermissions
+                .Where(up =>
+                    up.OrganizationId == id ||
+                    (up.BranchId != null && branchIds.Contains(up.BranchId.Value)))
+                .ToListAsync();
+            _context.UserPermissions.RemoveRange(userPermissions);
+
+            var userBranches = await _context.UserBranches
+                .Where(ub => branchIds.Contains(ub.BranchId))
+                .ToListAsync();
+            _context.UserBranches.RemoveRange(userBranches);
+
+            var userOrganizations = await _context.UserOrganizations
+                .Where(uo => uo.OrganizationId == id)
+                .ToListAsync();
+            _context.UserOrganizations.RemoveRange(userOrganizations);
+
+            var organizationProducts = await _context.OrganizationProducts
+                .Where(op => op.OrganizationId == id)
+                .ToListAsync();
+            _context.OrganizationProducts.RemoveRange(organizationProducts);
+
+            _context.Branches.RemoveRange(org.Branches);
             _context.Organizations.Remove(org);
+
             await _context.SaveChangesAsync();
 
             return new JsonResult(new
@@ -875,12 +930,41 @@ namespace diplom_1.Pages.Users
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> OnPostSaveBranchAsync([FromBody] BranchDto dto)
         {
-            if (dto == null || string.IsNullOrWhiteSpace(dto.Address))
+            if (dto == null)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Нет данных филиала"
+                });
+            }
+
+            dto.Address = dto.Address?.Trim() ?? "";
+
+            if (string.IsNullOrWhiteSpace(dto.Address))
             {
                 return new JsonResult(new
                 {
                     success = false,
                     message = "Адрес филиала обязателен"
+                });
+            }
+
+            if (dto.Address.Length < 5)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Адрес филиала должен быть подробнее"
+                });
+            }
+
+            if (dto.OrganizationId <= 0 || !await _context.Organizations.AnyAsync(o => o.Id == dto.OrganizationId))
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Выберите существующую организацию"
                 });
             }
 
@@ -988,6 +1072,25 @@ namespace diplom_1.Pages.Users
                     message = "У вас нет прав на удаление этого филиала"
                 });
             }
+
+            var relatedRequests = await _context.Requests
+                .Where(r => r.BranchId == id)
+                .ToListAsync();
+
+            foreach (var request in relatedRequests)
+            {
+                request.BranchId = null;
+            }
+
+            var userPermissions = await _context.UserPermissions
+                .Where(up => up.BranchId == id)
+                .ToListAsync();
+            _context.UserPermissions.RemoveRange(userPermissions);
+
+            var userBranches = await _context.UserBranches
+                .Where(ub => ub.BranchId == id)
+                .ToListAsync();
+            _context.UserBranches.RemoveRange(userBranches);
 
             _context.Branches.Remove(branch);
             await _context.SaveChangesAsync();
@@ -1149,6 +1252,56 @@ namespace diplom_1.Pages.Users
                     success = false
                 });
             }
+        }
+
+        private static ValidationResult ValidateOrganizationDto(OrgDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Name))
+            {
+                return ValidationResult.Fail("Укажите название организации");
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.City))
+            {
+                return ValidationResult.Fail("Укажите город организации");
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Inn))
+            {
+                return ValidationResult.Fail("Укажите ИНН организации");
+            }
+
+            if (dto.Inn.Any(ch => !char.IsDigit(ch)))
+            {
+                return ValidationResult.Fail("ИНН должен содержать только цифры");
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Kpp))
+            {
+                return ValidationResult.Fail("Укажите КПП организации");
+            }
+
+            if (dto.Kpp.Any(ch => !char.IsDigit(ch)))
+            {
+                return ValidationResult.Fail("КПП должен содержать только цифры");
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Ogrn))
+            {
+                return ValidationResult.Fail("Укажите ОГРН организации");
+            }
+
+            if (dto.Ogrn.Any(ch => !char.IsDigit(ch)))
+            {
+                return ValidationResult.Fail("ОГРН должен содержать только цифры");
+            }
+
+            if (dto.WorkHoursLimit < 0)
+            {
+                return ValidationResult.Fail("Лимит часов не может быть отрицательным");
+            }
+
+            return ValidationResult.Ok();
         }
 
         private async Task<ValidationResult> ValidateUserSaveDataAsync(
@@ -1499,6 +1652,7 @@ namespace diplom_1.Pages.Users
         {
             public int Id { get; set; }
             public string Name { get; set; } = "";
+            public string? City { get; set; }
             public string? Inn { get; set; }
             public string? Kpp { get; set; }
             public string? Ogrn { get; set; }

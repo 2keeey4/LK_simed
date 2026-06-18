@@ -12,7 +12,7 @@
     window.currentUserId = @Model.CurrentUserId;
 </script>
 
-<script defer src="~/js/users.js"></script>
+<script defer src="~/js/users.js" asp-append-version="true"></script>
 
 <div class="admin-container">
 
@@ -166,6 +166,7 @@
             <thead>
                 <tr>
                     <th>Название</th>
+                    <th>Город</th>
                     <th>ИНН</th>
                     <th>КПП</th>
                     <th>ОГРН</th>
@@ -418,22 +419,27 @@
         <div class="form-group">
             <label>
                 Название
-                <input type="text" id="orgName" />
+                <input type="text" id="orgName" autocomplete="off" />
+            </label>
+
+            <label>
+                Город
+                <input type="text" id="orgCity" autocomplete="off" />
             </label>
 
             <label>
                 ИНН
-                <input type="text" id="orgInn" />
+                <input type="text" id="orgInn" autocomplete="off" />
             </label>
 
             <label>
                 КПП
-                <input type="text" id="orgKpp" />
+                <input type="text" id="orgKpp" autocomplete="off" />
             </label>
 
             <label>
                 ОГРН
-                <input type="text" id="orgOgrn" />
+                <input type="text" id="orgOgrn" autocomplete="off" />
             </label>
 
             <label>
@@ -480,6 +486,7 @@
                 Адрес филиала
                 <input type="text"
                        id="branchAddress"
+                       autocomplete="off"
                        placeholder="Введите адрес филиала" />
             </label>
 

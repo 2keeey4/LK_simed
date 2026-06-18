@@ -1108,6 +1108,7 @@ async function loadOrgs(page = 1) {
 
             tr.innerHTML = `
                 <td class="list-cell">${formatCompactList([org.name], 1)}</td>
+                <td>${escapeHtml(org.city || "")}</td>
                 <td>${escapeHtml(org.inn || "")}</td>
                 <td>${escapeHtml(org.kpp || "")}</td>
                 <td>${escapeHtml(org.ogrn || "")}</td>
@@ -1148,7 +1149,7 @@ function renderOrgPagination() {
 function openOrgModal() {
     currentOrgId = 0;
     document.getElementById("orgModalTitle").textContent = "Добавить организацию";
-    ["orgName", "orgInn", "orgKpp", "orgOgrn"].forEach(id =>
+    ["orgName", "orgCity", "orgInn", "orgKpp", "orgOgrn"].forEach(id =>
         document.getElementById(id).value = ""
     );
     document.getElementById("orgWorkHoursLimit").value = 0;
@@ -1171,6 +1172,7 @@ async function editOrg(id) {
             const canEdit = org.canEdit;
 
             document.getElementById("orgName").value = org.name;
+            document.getElementById("orgCity").value = org.city || "";
             document.getElementById("orgInn").value = org.inn || "";
             document.getElementById("orgKpp").value = org.kpp || "";
             document.getElementById("orgOgrn").value = org.ogrn || "";
@@ -1180,7 +1182,7 @@ async function editOrg(id) {
 
             document.getElementById("orgModalTitle").textContent = canEdit ? "Редактировать организацию" : "Просмотр организации";
 
-            const inputs = ["orgName", "orgInn", "orgKpp", "orgOgrn", "orgWorkHoursLimit"];
+            const inputs = ["orgName", "orgCity", "orgInn", "orgKpp", "orgOgrn", "orgWorkHoursLimit"];
             inputs.forEach(inputId => {
                 const input = document.getElementById(inputId);
                 if (input) input.disabled = !canEdit;
@@ -1244,8 +1246,40 @@ async function editBranch(id) {
 
 async function saveOrg() {
     const name = document.getElementById("orgName").value.trim();
+    const city = document.getElementById("orgCity").value.trim();
+    const inn = document.getElementById("orgInn").value.trim();
+    const kpp = document.getElementById("orgKpp").value.trim();
+    const ogrn = document.getElementById("orgOgrn").value.trim();
+    const workHoursLimitRaw = document.getElementById("orgWorkHoursLimit").value;
+    const workHoursLimit = parseFloat(workHoursLimitRaw);
+
     if (!name) {
         showToast("Введите название организации");
+        return;
+    }
+
+    if (!city) {
+        showToast("Введите город организации");
+        return;
+    }
+
+    if (!inn || !/^\d+$/.test(inn)) {
+        showToast("Введите корректный ИНН");
+        return;
+    }
+
+    if (!kpp || !/^\d+$/.test(kpp)) {
+        showToast("Введите корректный КПП");
+        return;
+    }
+
+    if (!ogrn || !/^\d+$/.test(ogrn)) {
+        showToast("Введите корректный ОГРН");
+        return;
+    }
+
+    if (Number.isNaN(workHoursLimit) || workHoursLimit < 0) {
+        showToast("Введите корректный лимит часов");
         return;
     }
 
@@ -1255,10 +1289,11 @@ async function saveOrg() {
     const payload = {
         id: currentOrgId,
         name,
-        inn: document.getElementById("orgInn").value.trim(),
-        kpp: document.getElementById("orgKpp").value.trim(),
-        ogrn: document.getElementById("orgOgrn").value.trim(),
-        workHoursLimit: parseFloat(document.getElementById("orgWorkHoursLimit").value) || 0,
+        city,
+        inn,
+        kpp,
+        ogrn,
+        workHoursLimit,
         productIds: productIds
     };
 
@@ -1867,6 +1902,11 @@ async function saveBranch() {
         return;
     }
 
+    if (address.length < 5) {
+        showToast("Адрес филиала должен быть подробнее");
+        return;
+    }
+
     if (!orgId) {
         showToast("Выберите организацию");
         return;
@@ -2238,6 +2278,7 @@ function getFilteredOrgsData() {
     return managementAllOrgs.filter(org => {
         const area = [
             org.name,
+            org.city,
             org.inn,
             org.kpp,
             org.ogrn,
@@ -2277,6 +2318,7 @@ function renderOrgsPage() {
 
         tr.innerHTML = `
             <td class="list-cell">${formatCompactList([org.name], 1, "Организация")}</td>
+            <td>${escapeHtml(org.city || "")}</td>
             <td>${escapeHtml(org.inn || "")}</td>
             <td>${escapeHtml(org.kpp || "")}</td>
             <td>${escapeHtml(org.ogrn || "")}</td>
