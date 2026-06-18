@@ -1417,8 +1417,8 @@ function buildRequestsReportData(
     const currentAllItems = currentAllRows.map(row => getRowData(row));
     const hoursItems = hoursRows.map(row => getRowData(row));
 
-    const estimatedHoursTotal = hoursItems.reduce((sum, item) => sum + Number(item.estimatedHours || 0), 0);
-    const totalHours = hoursItems.reduce((sum, item) => sum + Number(item.hours || 0), 0);
+    const estimatedHoursTotal = periodItems.reduce((sum, item) => sum + Number(item.estimatedHours || 0), 0);
+    const totalHours = periodItems.reduce((sum, item) => sum + Number(item.hours || 0), 0);
     const itemsWithEstimate = hoursItems.filter(item => Number(item.estimatedHours || 0) > 0);
     const itemsWithinEstimate = itemsWithEstimate.filter(item => Number(item.hours || 0) <= Number(item.estimatedHours || 0));
     const sliEstimatedTime = itemsWithEstimate.length > 0

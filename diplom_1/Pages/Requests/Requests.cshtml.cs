@@ -186,7 +186,7 @@ namespace diplom_1.Pages.Requests
             FinishedCount = CountStatusEvents(currentList, "Завершена", from, to);
             CancelledPeriodCount = CountStatusEvents(currentList, "Отменена", from, to);
 
-            Requests = periodList
+            Requests = currentList
                 .Select(r => new RequestDto
                 {
                     Id = r.Id,
