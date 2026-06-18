@@ -1003,12 +1003,12 @@ namespace diplom_1.Pages.Requests
                 selectedSamples = new List<EstimateSampleDto>();
             }
 
-            double baseHours = GetBaseHoursByTopic(topic);
+            double baseHours = GetBaseHoursByTopic(topicEntity, topic);
             double sampleAverage = selectedSamples.Any()
                 ? selectedSamples.Average(x => x.Hours)
                 : baseHours;
 
-            double priorityFactor = GetPriorityFactor(priority);
+            double priorityFactor = GetPriorityFactor(priorityEntity, priority);
             double descriptionFactor = GetDescriptionFactor(description);
 
             double estimatedHours = sampleAverage * priorityFactor * descriptionFactor;
@@ -1202,13 +1202,13 @@ namespace diplom_1.Pages.Requests
                     source = "base";
                 }
 
-                double baseHours = GetBaseHoursByTopic(topic);
+                double baseHours = GetBaseHoursByTopic(topicEntity, topic);
 
                 double sampleAverage = selectedSamples.Any()
                     ? selectedSamples.Average(x => x.Hours)
                     : baseHours;
 
-                double priorityFactor = GetPriorityFactor(priority);
+                double priorityFactor = GetPriorityFactor(priorityEntity, priority);
 
                 double estimatedHours = sampleAverage * priorityFactor;
 
@@ -1250,8 +1250,13 @@ namespace diplom_1.Pages.Requests
                 .ToLowerInvariant();
         }
 
-        private static double GetBaseHoursByTopic(string topic)
+        private static double GetBaseHoursByTopic(RequestTopic? topicEntity, string topic)
         {
+            if (topicEntity != null && topicEntity.BaseHours > 0)
+            {
+                return topicEntity.BaseHours;
+            }
+
             string normalized = NormalizeText(topic);
 
             if (normalized.Contains("интерфейс"))
@@ -1287,10 +1292,15 @@ namespace diplom_1.Pages.Requests
             return 5;
         }
 
-        private static double GetPriorityFactor(string priority)
+        private static double GetPriorityFactor(RequestPriority? priorityEntity, string priority)
         {
-            // В этой модели приоритет отражает срочность выполнения.
-            // Чем выше приоритет, тем меньше ожидаемое календарное время реакции/выполнения.
+            // Коэффициент приоритета хранится в справочнике приоритетов.
+            // Запасная логика оставлена, чтобы расчёт не ломался, если поле в БД ещё не заполнено.
+            if (priorityEntity != null && priorityEntity.Coefficient > 0)
+            {
+                return priorityEntity.Coefficient;
+            }
+
             return priority switch
             {
                 "Критический" => 0.75,

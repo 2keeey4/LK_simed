@@ -925,12 +925,38 @@ async function saveUser() {
     }
 
     if (!fullName || !email || !login) {
-        showToast("Заполните обязательные поля");
+        showToast("Заполните ФИО, email и логин");
+        return;
+    }
+
+    if (!isValidEmail(email)) {
+        showToast("Укажите корректный email");
+        return;
+    }
+
+    if (/\s/.test(login)) {
+        showToast("Логин не должен содержать пробелы");
         return;
     }
 
     const orgs = Array.from(document.querySelectorAll(".org-checkbox:checked")).map(cb => parseInt(cb.value));
     const branches = Array.from(document.querySelectorAll(".branch-checkbox:checked")).map(cb => parseInt(cb.value));
+
+    if (orgs.length === 0) {
+        showToast("Выберите хотя бы одну организацию пользователя");
+        return;
+    }
+
+    const invalidBranches = branches.filter(branchId => {
+        const branchCheckbox = document.querySelector(`.branch-checkbox[value="${branchId}"]`);
+        const orgId = Number(branchCheckbox?.dataset?.org || 0);
+        return orgId > 0 && !orgs.includes(orgId);
+    });
+
+    if (invalidBranches.length > 0) {
+        showToast("Выбран филиал без соответствующей организации");
+        return;
+    }
 
     const permissionValidation = validateSelectedPermissions();
 
@@ -994,7 +1020,10 @@ async function saveUser() {
         if (result.success) {
             closeModal();
             showToast("Пользователь сохранён");
-            setTimeout(() => location.reload(), 1000);
+
+            await loadDictionaries();
+            initUserFilters();
+            await loadUsers(userCurrentPage);
         } else {
             showToast(result.message || "Ошибка сохранения");
         }
@@ -2019,6 +2048,10 @@ function sortTable(btn, selector, colIndex, type) {
 
         btn.textContent = "Сортировать A–Я";
     }
+}
+
+function isValidEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
 }
 
 function generatePassword(length = 10) {

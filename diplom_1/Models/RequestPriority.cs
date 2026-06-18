@@ -11,6 +11,9 @@ namespace diplom_1.Models
         [MaxLength(80)]
         public string Name { get; set; } = string.Empty;
 
+        [Range(0.1, 10)]
+        public double Coefficient { get; set; } = 1.0;
+
         public ICollection<Request> Requests { get; set; } = new List<Request>();
     }
 }

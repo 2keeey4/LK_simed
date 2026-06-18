@@ -152,6 +152,30 @@ namespace diplom_1.Pages.Users
                     .Select(int.Parse)
                     .ToList() ?? new List<int>();
 
+                data.FullName = data.FullName?.Trim() ?? "";
+                data.Email = data.Email?.Trim() ?? "";
+                data.Login = data.Login?.Trim() ?? "";
+                data.Organizations ??= new List<int>();
+                data.Branches ??= new List<int>();
+                data.Permissions ??= new List<PermissionDto>();
+
+                var userDataValidation = await ValidateUserSaveDataAsync(
+                    data,
+                    isNew,
+                    currentUserId,
+                    isCurrentUserSuperAdmin,
+                    currentUserOrgs
+                );
+
+                if (!userDataValidation.Success)
+                {
+                    return new JsonResult(new
+                    {
+                        success = false,
+                        message = userDataValidation.Message
+                    });
+                }
+
                 var permissionsValidation = ValidateUserPermissions(data.Permissions);
 
                 if (!permissionsValidation.Success)
@@ -1125,6 +1149,162 @@ namespace diplom_1.Pages.Users
                     success = false
                 });
             }
+        }
+
+        private async Task<ValidationResult> ValidateUserSaveDataAsync(
+            UserSaveDto data,
+            bool isNew,
+            int? currentUserId,
+            bool isCurrentUserSuperAdmin,
+            List<int> currentUserOrgs)
+        {
+            if (string.IsNullOrWhiteSpace(data.FullName))
+            {
+                return ValidationResult.Fail("Укажите ФИО пользователя");
+            }
+
+            if (string.IsNullOrWhiteSpace(data.Email))
+            {
+                return ValidationResult.Fail("Укажите email пользователя");
+            }
+
+            try
+            {
+                _ = new System.Net.Mail.MailAddress(data.Email);
+            }
+            catch
+            {
+                return ValidationResult.Fail("Укажите корректный email пользователя");
+            }
+
+            if (string.IsNullOrWhiteSpace(data.Login))
+            {
+                return ValidationResult.Fail("Укажите логин пользователя");
+            }
+
+            if (data.Login.Any(char.IsWhiteSpace))
+            {
+                return ValidationResult.Fail("Логин не должен содержать пробелы");
+            }
+
+            var normalizedOrgIds = data.Organizations
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
+
+            var normalizedBranchIds = data.Branches
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
+
+            data.Organizations = normalizedOrgIds;
+            data.Branches = normalizedBranchIds;
+
+            if (!normalizedOrgIds.Any())
+            {
+                return ValidationResult.Fail("Выберите хотя бы одну организацию пользователя");
+            }
+
+            if (!isCurrentUserSuperAdmin && normalizedOrgIds.Any(orgId => !currentUserOrgs.Contains(orgId)))
+            {
+                return ValidationResult.Fail("Вы не можете назначить пользователю недоступную организацию");
+            }
+
+            var userId = isNew ? 0 : data.Id;
+
+            var loginExists = await _context.Users
+                .AnyAsync(u => u.Id != userId && u.Login == data.Login);
+
+            if (loginExists)
+            {
+                return ValidationResult.Fail("Пользователь с таким логином уже существует");
+            }
+
+            var emailExists = await _context.Users
+                .AnyAsync(u => u.Id != userId && u.Email == data.Email);
+
+            if (emailExists)
+            {
+                return ValidationResult.Fail("Пользователь с таким email уже существует");
+            }
+
+            var existingOrgIds = await _context.Organizations
+                .Where(o => normalizedOrgIds.Contains(o.Id))
+                .Select(o => o.Id)
+                .ToListAsync();
+
+            if (existingOrgIds.Count != normalizedOrgIds.Count)
+            {
+                return ValidationResult.Fail("Выбрана несуществующая организация");
+            }
+
+            if (normalizedBranchIds.Any())
+            {
+                var branches = await _context.Branches
+                    .Where(b => normalizedBranchIds.Contains(b.Id))
+                    .Select(b => new { b.Id, b.OrganizationId })
+                    .ToListAsync();
+
+                if (branches.Count != normalizedBranchIds.Count)
+                {
+                    return ValidationResult.Fail("Выбран несуществующий филиал");
+                }
+
+                if (branches.Any(b => !normalizedOrgIds.Contains(b.OrganizationId)))
+                {
+                    return ValidationResult.Fail("Выбранный филиал не относится к выбранной организации пользователя");
+                }
+
+                if (!isCurrentUserSuperAdmin && branches.Any(b => !currentUserOrgs.Contains(b.OrganizationId)))
+                {
+                    return ValidationResult.Fail("Вы не можете назначить пользователю филиал недоступной организации");
+                }
+            }
+
+            var permissionIds = data.Permissions
+                .Select(p => p.PermissionId)
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
+
+            if (permissionIds.Any())
+            {
+                var existingPermissionCount = await _context.Permissions
+                    .CountAsync(p => permissionIds.Contains(p.Id));
+
+                if (existingPermissionCount != permissionIds.Count)
+                {
+                    return ValidationResult.Fail("Выбрано несуществующее право доступа");
+                }
+            }
+
+            foreach (var permission in data.Permissions)
+            {
+                var permissionOrgIds = permission.OrganizationIds?
+                    .Where(id => id > 0)
+                    .Distinct()
+                    .ToList() ?? new List<int>();
+
+                var permissionBranchIds = permission.BranchIds?
+                    .Where(id => id > 0)
+                    .Distinct()
+                    .ToList() ?? new List<int>();
+
+                permission.OrganizationIds = permissionOrgIds;
+                permission.BranchIds = permissionBranchIds;
+
+                if (permissionOrgIds.Any(orgId => !normalizedOrgIds.Contains(orgId)))
+                {
+                    return ValidationResult.Fail("Права можно назначать только в рамках организаций пользователя");
+                }
+
+                if (permissionBranchIds.Any(branchId => !normalizedBranchIds.Contains(branchId)))
+                {
+                    return ValidationResult.Fail("Права можно назначать только в рамках филиалов пользователя");
+                }
+            }
+
+            return ValidationResult.Ok();
         }
 
         private static ValidationResult ValidateUserPermissions(List<PermissionDto>? permissions)
